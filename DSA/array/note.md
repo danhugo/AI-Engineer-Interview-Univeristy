@@ -31,47 +31,56 @@ arr.append(2)
 
 Examples: Python `list`, Java `ArrayList`, C++ `std::vector`, Go `slice`.
 
-**How growth works (capacity vs size):**
-- `size` = how many items you have.
-- `capacity` = how many slots are reserved.
-- When `size` reaches `capacity`, it doubles the capacity, copies, and frees the old block.
-
-| | Static array | Dynamic array |
-|---|---|---|
-| Size | fixed | grows/shrinks |
-| Resize | manual (new array + copy) | automatic |
-| Access `arr[i]` | O(1) | O(1) |
-| Append | — | O(1) amortized* |
-| Extra memory | none | some unused capacity |
-
-\*Most appends are O(1). The occasional resize is O(n), but since it doubles each time, the average cost per append stays O(1) ("amortized").
 
 ### Example: C array vs Python list
 
-A C array is a classic **static** array; a Python list is a **dynamic** array. They also differ in how they store data:
+**C array** keeps the numbers together.
 
-![C Array vs Python List in memory mapping](c_array_vs_python_list_unified_memory_map.png)
+int arr[4] = {1,2,3,4} is just 16 bytes, side by side. The numbers live right next to each other. To get item i, the computer does simple math: start + i × 4. One jump. Very fast.
+**Python list** keeps pointers together, not numbers.
 
-| | C array (static) | Python list (dynamic) |
-|---|---|---|
-| What each slot holds | the raw value | a *pointer* to an object elsewhere in memory |
-| Access `arr[2]` | one read | two reads (read pointer → follow it to the object) |
-| Per-element overhead | none (e.g. 4 bytes for an int) | object overhead — refcount, type, size (~28 bytes for an int) |
-| Types | all items must be the same type | can mix types |
-| Size | fixed | grows anytime |
-| Memory management | manual — call `free()` or you leak | automatic (garbage collection) |
-| Trade-off | fast and small, but strict | easy to use, but slower and uses more memory |
+arr = [1,2,3,4] has a small header (counts, capacity) + a block of pointers. Each pointer points to a separate number object somewhere else in the heap. Multiple pointers can also point to same object. To get item i, the computer reads the pointer, then jumps far away to find the real number. Two jumps. Slower.
 
-```c
-// C — you free it yourself
-int* arr = (int*)malloc(5 * sizeof(int));
-// ... use arr ...
-free(arr);   // forget this → memory leak
-```
+![C Array vs Python List in memory mapping](c_array_vs_python_list_white_bg.png)
 
-```python
-# Python — freed automatically
-arr = [1, 2, 3, 4, 5]
-# ... use arr ...
-# no free needed; garbage collector handles it
-```
+
+## Array Operations
+
+Python `list` is a **dynamic array**. It always allocates extra more slots (capacity) than the current `len(list)`.
+- **capacity**: number of slot are allocated for the list. 
+- **size**: actual number of element in the list. **size** <= **capacity**
+- **Growth factor**: ~2× in CPython (precisely: `new_capacity = old_capacity + (old_capacity >> 3) + (6 if old_capacity < 9 else 0)`).
+
+| Operation | Code | Time Complexity |
+|-----------|------|-----------------|
+| Index access | `arr[i]` | O(1) |
+| Append | `arr.append(x)` | O(1) amortized |
+| Pop from end | `arr.pop()` | O(1) amortized|
+| Insert | `arr.insert(i, x)` | O(n) |
+| Delete | `del arr[i]` | O(n) |
+| Search | `x in arr` | O(n) |
+| Slice | `arr[i:j]` | O(k) |
+| Length | `len(arr)` | O(1) |
+
+**Index access** `arr[i]` — O(1)  
+Direct pointer arithmetic. Bounds check only (raises `IndexError` if invalid).
+
+**Append** `arr.append(x)` — O(1) *amortized*  
+If `size == capacity`: allocate new block (~2×), copy all elements O(n), free memory of old block → O(n).  
+Then store `x` at `arr[size]`, increment `size`. The rare resize cost averages to O(1) per append.
+
+**Pop from end** `arr.pop()` — O(1) *amortized*  
+Decrement `size`, return element. Optionally shrink `capacity // 2` when `size <= capacity // 4` (prevents thrashing).
+
+**Insert** `arr.insert(i, x)` — O(n)  
+If `size == capacity`: resize first. Shift elements `[i:]` right by one, write `x` at `i`, increment `size`.
+
+**Delete** `del arr[i]` — O(n)  
+Shift elements `[i+1:]` left by one, decrement `size`. Optionally shrink capacity (same threshold as pop).
+
+**Search** `x in arr` — O(n)  
+Linear scan; returns `True` on first match.
+
+**Slice** `arr[i:j]` — O(k) where `k = j - i`  
+Allocates new list of length `k`, copies references (pointers) from source range.
+
