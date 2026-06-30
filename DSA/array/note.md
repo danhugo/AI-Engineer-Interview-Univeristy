@@ -1,86 +1,129 @@
-# Array
+# Array — Interview Knowledge Sheet
 
-An array is a contiguous block of memory:
-- In statically typed languages (C, Java, C++), an array is declared with a fixed type, so every slot must hold that type.
+## What is an Array?
+
+An array is a **contiguous block of memory** — all elements sit next to each other, no gaps.
+This is what makes index access O(1): the computer calculates the address with simple math instead of searching.
+
+```
+address of arr[i] = start_address + i × element_size
+```
+
+---
+
+## Static vs Dynamic Typed Languages
+
+How arrays work depends on the language:
+
+**Statically typed (C, Java, C++)** — the array stores the actual values side by side.
+
 ```c
-int* arr = (int*)malloc(5 * sizeof(int));
+int arr[4] = {1, 2, 3, 4};
+// 16 bytes in memory: [1][2][3][4]
 ```
-This allocates space for 5 integers and stores a pointer to the first element in `arr`. Under the hood, the computer reserves 5 blocks of memory (4 bytes x 5) for the values, plus one more block (8 or 4 bytes) for the pointer itself.
 
-- In dynamically typed languages (Python, JavaScript), an array stores pointers to objects rather than the objects themselves. Therefore, array in python (list) can store different type of values.
+To get `arr[i]`: one jump — start + i × 4. Very fast.
+
+**Dynamically typed (Python, JavaScript)** — the array stores *pointers* to objects, not the objects themselves.
+
 ```python
-arr = [1, 2, 3, 4, 5]
-arr = [10, 'hi', 3.14, True]
+arr = [1, 2, 3, 4]
+# memory: [ptr→1][ptr→2][ptr→3][ptr→4]
+# each pointer leads to an object somewhere else in memory
 ```
 
-## Static array vs dynamic array
+To get `arr[i]`: two jumps — read pointer, then follow it. This is why Python lists can hold mixed types (`[10, "hi", 3.14, True]`) — every slot is just a pointer regardless of what it points to.
 
-**Static array** — fixed size, decided when created. It cannot grow or shrink. If you need more space, you must make a new array and copy everything over.
+![C Array vs Python List in memory mapping](c_array_vs_python_list_white_bg.png)
+
+---
+
+## Static Array vs Dynamic Array
+
+**Static array** — fixed size set at creation. Cannot grow or shrink.
 
 ```c
-int arr[5];   // size 5, fixed forever
+int arr[5];   // always 5 slots, no more
 ```
 
-**Dynamic array** — can grow as you add items. It still uses a contiguous block under the hood, but when it gets full, it automatically allocates a bigger block (usually 2x), copies the old items over, and frees the old one.
+**Dynamic array** — grows automatically as you add items. Under the hood it's still a contiguous block, but when it gets full it:
+1. Allocates a new block (~2× bigger)
+2. Copies all old items over
+3. Frees the old block
 
 ```python
-arr = []          # starts empty
-arr.append(1)     # grows automatically
+arr = []
+arr.append(1)   # grows automatically
 arr.append(2)
 ```
 
 Examples: Python `list`, Java `ArrayList`, C++ `std::vector`, Go `slice`.
 
+---
 
-### Example: C array vs Python list
+## Python `list` Internals
 
-**C array** keeps the numbers together.
+Python `list` is a dynamic array with two sizes:
+- **capacity** — how many slots are currently allocated
+- **size** — how many elements are actually stored (`len(list)`)
 
-int arr[4] = {1,2,3,4} is just 16 bytes, side by side. The numbers live right next to each other. To get item i, the computer does simple math: start + i × 4. One jump. Very fast.
-**Python list** keeps pointers together, not numbers.
+`size` is always ≤ `capacity`. Extra slots are reserved so most appends don't need a resize.
 
-arr = [1,2,3,4] has a small header (counts, capacity) + a block of pointers. Each pointer points to a separate number object somewhere else in the heap. Multiple pointers can also point to same object. To get item i, the computer reads the pointer, then jumps far away to find the real number. Two jumps. Slower.
+**Growth factor**: ~2× in CPython.
+Precise formula: `new_capacity = old_capacity + (old_capacity >> 3) + (6 if old_capacity < 9 else 0)`
 
-![C Array vs Python List in memory mapping](c_array_vs_python_list_white_bg.png)
+---
 
+## Operations & Complexity
 
-## Array Operations
-
-Python `list` is a **dynamic array**. It always allocates extra more slots (capacity) than the current `len(list)`.
-- **capacity**: number of slot are allocated for the list. 
-- **size**: actual number of element in the list. **size** <= **capacity**
-- **Growth factor**: ~2× in CPython (precisely: `new_capacity = old_capacity + (old_capacity >> 3) + (6 if old_capacity < 9 else 0)`).
-
-| Operation | Code | Time Complexity |
-|-----------|------|-----------------|
+| Operation | Code | Time |
+|-----------|------|------|
 | Index access | `arr[i]` | O(1) |
-| Append | `arr.append(x)` | O(1) amortized |
-| Pop from end | `arr.pop()` | O(1) amortized|
-| Insert | `arr.insert(i, x)` | O(n) |
-| Delete | `del arr[i]` | O(n) |
+| Append | `arr.append(x)` | O(1) amortised |
+| Pop from end | `arr.pop()` | O(1) amortised |
+| Insert at i | `arr.insert(i, x)` | O(n) |
+| Delete at i | `del arr[i]` | O(n) |
 | Search | `x in arr` | O(n) |
 | Slice | `arr[i:j]` | O(k) |
 | Length | `len(arr)` | O(1) |
 
-**Index access** `arr[i]` — O(1)  
-Direct pointer arithmetic. Bounds check only (raises `IndexError` if invalid).
+### Index access — O(1)
+Direct address math: `start + i × element_size`. Just a bounds check, then one memory read.
 
-**Append** `arr.append(x)` — O(1) *amortized*  
-If `size == capacity`: allocate new block (~2×), copy all elements O(n), free memory of old block → O(n).  
-Then store `x` at `arr[size]`, increment `size`. The rare resize cost averages to O(1) per append.
+### Append — O(1) amortised
+- If `size < capacity`: write at `arr[size]`, increment size. O(1).
+- If `size == capacity`: resize (~2×) + copy everything → O(n), then write. Rare, averages to O(1) per append.
 
-**Pop from end** `arr.pop()` — O(1) *amortized*  
-Decrement `size`, return element. Optionally shrink `capacity // 2` when `size <= capacity // 4` (prevents thrashing).
+### Pop from end — O(1) amortised
+Decrement size and return the element. Optionally shrink capacity when `size ≤ capacity // 4` to avoid wasting memory (but never below size).
 
-**Insert** `arr.insert(i, x)` — O(n)  
-If `size == capacity`: resize first. Shift elements `[i:]` right by one, write `x` at `i`, increment `size`.
+### Insert at i — O(n)
+Resize if needed, then shift all elements from index i onward one position right, then write the new value at i.
 
-**Delete** `del arr[i]` — O(n)  
-Shift elements `[i+1:]` left by one, decrement `size`. Optionally shrink capacity (same threshold as pop).
+### Delete at i — O(n)
+Shift all elements from `i+1` onward one position left, then decrement size.
 
-**Search** `x in arr` — O(n)  
-Linear scan; returns `True` on first match.
+### Search — O(n)
+Linear scan from the start. Returns on the first match.
 
-**Slice** `arr[i:j]` — O(k) where `k = j - i`  
-Allocates new list of length `k`, copies references (pointers) from source range.
+### Slice `arr[i:j]` — O(k) where k = j − i
+Allocates a new list of length k and copies k references (pointers) from the source range.
 
+### Length — O(1)
+`len()` reads a stored counter — no counting needed.
+
+---
+
+## Amortised O(1) — Why Append is Fast on Average
+
+Imagine starting with capacity 1 and doubling each time:
+
+```
+capacity 1  → 2  → 4  → 8  → 16 ...
+resize cost    1    2    4    8   ...
+```
+
+After n appends, total resize cost = 1 + 2 + 4 + … ≤ 2n → O(n) total.
+Spread over n appends = **O(1) per append**.
+
+The key insight: each element is copied at most once per doubling, and doublings get rarer as the array grows.
