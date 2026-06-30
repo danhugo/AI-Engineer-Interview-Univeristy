@@ -185,6 +185,36 @@ class HashMapWithResize:
 # WHY tombstones?
 #   If you blank a deleted slot, the probe chain breaks and later
 #   lookups incorrectly return "not found".
+#
+# TOMBSTONE INTUITION:
+#
+#   Step 1 — collision forces keys to spread out via probing:
+#     put(A), put(B), put(C) all hash to index 2
+#     slots: [_][_][A][B][C][_EMPTY]   (B and C probed forward)
+#
+#   Step 2 — a delete creates a tombstone in the middle:
+#     remove(B)
+#     slots: [_][_][A][💀][C][_EMPTY]
+#
+#   Step 3 — now get(C) must walk PAST the tombstone:
+#     probe 2 → A  (not C, keep going)
+#     probe 3 → 💀 (not C, but don't stop! C is at 4)
+#     probe 4 → C  ✓ found
+#     If slot 3 were _EMPTY instead of 💀, we'd stop at 3
+#     and wrongly return "not found".
+#
+#   Step 4 — put(D) with same home index 2, after the delete above:
+#     slots: [_][_][A][💀][C][_EMPTY]
+#     probe 2 → A        (not D, not empty → keep going)
+#     probe 3 → 💀       (not D → keep going, but bookmark 3 as first_tomb)
+#     probe 4 → C        (not D, not empty → keep going)
+#     probe 5 → _EMPTY   (stop — D is not in the table)
+#     insert at first_tomb=3, not at empty slot 5
+#     → slot 3 is closer to home, so future get(D) only needs 2 probes
+#     → if we inserted at 5, get(D) would need 4 probes every time
+#     WHY not insert at tombstone 3 immediately when we first see it?
+#     → because D might already exist at slot 4 or 5. We must check
+#       first to avoid duplicates. Only _EMPTY guarantees "not here".
 
 _EMPTY     = object()
 _TOMBSTONE = object()
@@ -206,30 +236,34 @@ class HashMapOpenAddressing:
         """
         Insert or update using linear probing.
 
-        HINT skeleton:
-          i = self._index(key)
-          first_tomb = None
-          for _ in range(self.size):
-              if self.slots[i] is _EMPTY:
-                  target = first_tomb if first_tomb is not None else i
-                  self.slots[target] = key
-                  self.vals[target]  = value
-                  self.count += 1
-                  return
-              if self.slots[i] is _TOMBSTONE:
-                  if first_tomb is None: first_tomb = i
-              elif self.slots[i] == key:
-                  self.vals[i] = value   # update
-                  return
-              i = (i + 1) % self.size
+        HINT — tombstones only exist because of past deletes:
+          Example: insert A, B, C all hashing to index 2, then delete B:
+            slots: [_][_][A][💀][C][_EMPTY]
+          Now put("D") also hashes to 2. You must walk past the tombstone
+          because C is still alive further along. But you bookmark the
+          tombstone so you can reuse that slot for D instead of the
+          distant empty slot — keeps probe chains short.
 
-        Why save first_tomb?
-          A tombstone slot is free to reuse. If we find the key later we
-          update in place. If we never find it, we insert at the tombstone
-          to keep the probe chain as short as possible.
+          Three cases as you walk slot by slot:
+          1. Slot is _EMPTY
+             → key not in table. Insert here — BUT if you bookmarked a
+               tombstone earlier, insert THERE instead (closer to home).
+               Increment count and return.
+
+          2. Slot is _TOMBSTONE
+             → something was deleted here. Keep probing — key might be
+               further along. Bookmark this index if it's the first
+               tombstone you've seen (you'll reuse it in case 1).
+
+          3. Slot holds your exact key
+             → update value in place and return.
+
+          Use `for _ in range(self.size)` to cap the loop at size steps.
         """
         # TODO
         pass
+                
+
 
     def get(self, key, default=None):
         """
