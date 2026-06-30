@@ -33,7 +33,7 @@ class Vector:
         Start with capacity=16, size=0.
         """
         # TODO
-        raise NotImplementedError
+        pass
 
     def _make_array(self, capacity):
         """
@@ -45,24 +45,24 @@ class Vector:
         That's intentional. You manage it manually.
         """
         # TODO
-        raise NotImplementedError
+        pass
 
     # ── Accessors ──────────────────────────────────────────
 
     def size(self):
         """Return the number of items currently stored."""
         # TODO
-        raise NotImplementedError
+        pass
 
     def capacity(self):
         """Return the number of slots in the underlying array."""
         # TODO
-        raise NotImplementedError
+        pass
 
     def is_empty(self):
         """Return True if no items are stored."""
         # TODO
-        raise NotImplementedError
+        pass
 
     def at(self, index):
         """
@@ -74,7 +74,7 @@ class Vector:
         array gives undefined behaviour, not a clean error.
         """
         # TODO
-        raise NotImplementedError
+        pass
 
     def find(self, item):
         """
@@ -84,7 +84,7 @@ class Vector:
         HINT: Linear scan from 0 to self._size (not self._capacity).
         """
         # TODO
-        raise NotImplementedError
+        pass
 
     # ── Mutators ───────────────────────────────────────────
 
@@ -97,7 +97,7 @@ class Vector:
         and increment self._size.
         """
         # TODO
-        raise NotImplementedError
+        pass
 
     def insert(self, index, item):
         """
@@ -117,7 +117,7 @@ class Vector:
         Don't forget to resize if needed BEFORE shifting.
         """
         # TODO
-        raise NotImplementedError
+        pass
 
     def prepend(self, item):
         """
@@ -125,7 +125,7 @@ class Vector:
         HINT: one line — reuse insert().
         """
         # TODO
-        raise NotImplementedError
+        pass
 
     def pop(self):
         """
@@ -142,7 +142,7 @@ class Vector:
         Waiting until 1/4 full gives a buffer zone.
         """
         # TODO
-        raise NotImplementedError
+        pass
 
     def delete(self, index):
         """
@@ -156,7 +156,7 @@ class Vector:
         Apply the same shrink rule as pop().
         """
         # TODO
-        raise NotImplementedError
+        pass
 
     def remove(self, item):
         """
@@ -169,7 +169,7 @@ class Vector:
           check it again. Only increment if you did NOT delete.
         """
         # TODO
-        raise NotImplementedError
+        pass
 
     # ── Private ────────────────────────────────────────────
 
@@ -183,7 +183,7 @@ class Vector:
         Do not try to copy the whole ctypes array at once — copy element by element.
         """
         # TODO
-        raise NotImplementedError
+        pass
 
     # ── Python protocols ───────────────────────────────────
 
@@ -193,7 +193,7 @@ class Vector:
         HINT: one line.
         """
         # TODO
-        raise NotImplementedError
+        pass
 
     def __iter__(self):
         """
@@ -201,7 +201,7 @@ class Vector:
         HINT: use `yield` inside a loop over range(self._size).
         """
         # TODO
-        raise NotImplementedError
+        pass
 
     def __repr__(self):
         items = [self._data[i] for i in range(self._size)]
