@@ -8,7 +8,7 @@
 HOW TO USE
 ----------
 1. Read the hint for each method.
-2. Delete the `raise NotImplementedError` and write your code.
+2. Delete the `pass` and write your code.
 3. Run:  python vector_practice.py
 4. A test PASS means your logic is correct. Fix until all pass.
 5. Only open vector_solution.py after you finish or are truly stuck.
