@@ -61,3 +61,4 @@ DSA/<topic>/
 |-------|--------|
 | Array | `DSA/array/` |
 | Hash Table | `DSA/hash-table/` |
+| Heap | `DSA/heap/` |
