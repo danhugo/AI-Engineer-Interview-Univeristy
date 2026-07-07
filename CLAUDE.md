@@ -62,3 +62,4 @@ DSA/<topic>/
 | Array | `DSA/array/` |
 | Hash Table | `DSA/hash-table/` |
 | Heap | `DSA/heap/` |
+| Matrix, Vector & Dot Product | `AI/linear-algebra/matrix-vector-dot-product/` |
