@@ -1,2 +1,2 @@
-- matrix vector dot product
-- vector norms (L1/L2/Frobenius)
+- [x] matrix vector dot product
+- [x] vector norms (L1/L2/Frobenius)
