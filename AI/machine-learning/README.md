@@ -1,11 +1,7 @@
 # Machine Learning — Essential Problems
 
-Trimmed from ~250 problems to the core set that keeps showing up in ML interviews.
+Trimmed to the core set that keeps showing up in ML interviews.
 Each one teaches a concept you must know.
-
-Excluded on purpose (better as their own sections later): LLM serving / latency,
-mechanistic interpretability, reinforcement learning, scaling laws, tokenizer &
-systems plumbing.
 
 ---
 
@@ -14,172 +10,172 @@ systems plumbing.
 - [ ] Linear Regression — Gradient Descent
 - [ ] Ridge Regression Loss
 - [ ] Lasso Regression via ISTA
+- [ ] Elastic Net Regression via Gradient Descent
+- [ ] Polynomial Regression Fit
 - [ ] Binary Classification with Logistic Regression
 - [ ] Train Logistic Regression with Gradient Descent
 - [ ] Train Softmax Regression with Gradient Descent
-- [ ] Polynomial Regression Fit
 
-## 2. Optimization & Training
+## 2. Loss Functions
+- [ ] MSE Loss
+- [ ] Cross-Entropy Loss
+- [ ] Hinge Loss (SVM)
+- [ ] Huber Loss
+- [ ] Focal Loss (imbalanced classification)
+- [ ] Label Smoothing for Multi-Class Cross-Entropy
+- [ ] KL Divergence
+- [ ] Contrastive Loss (SimCLR / metric learning)
+- [ ] Triplet Loss
+
+## 3. Optimization & Training
+- [ ] Gradient Descent Variants (Batch / SGD / Mini-batch)
+- [ ] Adam / AdamW Optimizer Step
+- [ ] Gradient Clipping
+- [ ] Weight Decay vs L2 Regularization
+- [ ] Dropout (forward + inference mode)
+- [ ] Batch Normalization Forward Pass
 - [ ] Feature Scaling
-- [ ] Gradient Descent Variants (Batch / SGD / Mini-batch) with MSE
+- [ ] Early Stopping Based on Validation Loss
+- [ ] Mixed Precision Training
+- [ ] Gradient Checkpointing
 
-## 3. Model Validation & Selection
-- [ ] Detect Overfitting or Underfitting
+## 4. Learning Rate Schedulers
+- [ ] StepLR
+- [ ] ExponentialLR
+- [ ] CosineAnnealingLR
+- [ ] Cosine Annealing with Warm Restarts
+- [ ] Linear Warmup Schedule
+- [ ] Warmup + Cosine Decay
+
+## 5. Model Validation & Selection
 - [ ] K-Fold Cross-Validation
 - [ ] Stratified Train-Test Split
 - [ ] Bias-Variance Decomposition from Bootstrap
 - [ ] Grid Search
+- [ ] Random Search vs Grid Search
+- [ ] Bayesian Hyperparameter Optimization
+- [ ] Learning Curve Generator for Bias-Variance Diagnosis
 
-## 4. Preprocessing
+## 6. Preprocessing
 - [ ] One-Hot Encoding
+- [ ] Label Encoding
 - [ ] StandardScaler Fit and Transform
+- [ ] MinMaxScaler
+- [ ] Missing Value Imputation (mean / median / mode)
+- [ ] Train/Val/Test Split with No Leakage
 
-## 5. Classification Metrics
+## 7. Classification Metrics
 - [ ] Accuracy Score
 - [ ] Precision
 - [ ] Recall
-- [ ] F1 Score
+- [ ] F1 Score (Binary)
+- [ ] Macro / Micro / Weighted F1 Score
+- [ ] Top-K Accuracy for Multi-Class
 - [ ] Confusion Matrix
-- [ ] ROC Curve
-- [ ] AUC
+- [ ] ROC Curve & AUC
 - [ ] Precision-Recall Curve
+- [ ] Jaccard Index
+- [ ] Dice Score
 
-## 6. Regression Metrics
-- [ ] R-squared
+## 8. Regression Metrics
 - [ ] RMSE
 - [ ] MAE
+- [ ] R-squared
+- [ ] MAPE (Mean Absolute Percentage Error)
 
-## 7. Loss Functions
-- [ ] Hinge Loss (SVM)
-- [ ] Huber Loss
-- [ ] Focal Loss (imbalanced classification)
-
-## 8. Decision Trees & Ensembles
+## 9. Decision Trees & Ensembles
 - [ ] Gini Impurity
 - [ ] Entropy-based Split Selection
-- [ ] Decision Tree Learning
-- [ ] Decision Tree for Regression
+- [ ] Decision Tree (Classification)
+- [ ] Decision Tree (Regression)
 - [ ] Random Forest Fit from Scratch
-- [ ] Gradient Boosting Regressor Step
+- [ ] Random Forest Feature Importance
+- [ ] Out-of-Bag Score
+- [ ] Bagging Classifier from Scratch
 - [ ] AdaBoost Fit Method
+- [ ] Gradient Boosting Regressor Step
+- [ ] XGBoost Objective Function
+- [ ] LightGBM Objective Function
 
-## 9. Support Vector Machines
+## 10. Support Vector Machines
 - [ ] Linear Kernel
 - [ ] RBF (Gaussian) Kernel
+- [ ] Polynomial Kernel
+- [ ] Sigmoid Kernel
 - [ ] SVM Margin Width
+- [ ] Hinge Loss for SVM
 - [ ] Pegasos Kernel SVM
 
-## 10. Naive Bayes
+## 11. Naive Bayes
 - [ ] Gaussian Naive Bayes
 - [ ] Multinomial Naive Bayes
+- [ ] Bernoulli Naive Bayes
 
-## 11. K-Nearest Neighbors
+## 12. K-Nearest Neighbors
 - [ ] K-Nearest Neighbors
 
-## 12. Clustering
+## 13. Clustering
 - [ ] K-Means
 - [ ] K-Means++ Initialization
 - [ ] DBSCAN
+- [ ] BIRCH Clustering
 - [ ] Hierarchical (Agglomerative) Clustering
 - [ ] Gaussian Mixture Model with EM
 - [ ] Silhouette Score
+- [ ] Elbow Method for K Selection
 
-## 13. Dimensionality Reduction
+## 14. Dimensionality Reduction
 - [ ] Principal Component Analysis (PCA)
 - [ ] Explained Variance Ratio for PCA
 - [ ] Linear Discriminant Analysis (LDA)
 - [ ] t-SNE Gradient
+- [ ] UMAP
+- [ ] Kernel PCA
 
+## 15. NLP / LLM
+- [ ] Layer Normalization for Sequence Data
+- [ ] Sparse Window Attention
+- [ ] GPT FeedForward Block (Linear-GELU-Linear)
+- [ ] Temperature Sampling
+- [ ] Beam Search Decoding
+- [ ] ROUGE Score
+- [ ] Extend BPE Tokenizer
+- [ ] Chat Template Encoding
+- [ ] Count Trainable Parameters (Weight Tying)
+- [ ] Model Memory Footprint
+- [ ] Shortcut Connection Gradient Effect
+- [ ] Multi-Head Attention from Scratch
+- [ ] Rotary Positional Encoding (RoPE)
+- [ ] Grouped Query Attention (GQA)
+- [ ] RMSNorm
+- [ ] LoRA / QLoRA Parameter Count
+- [ ] Flash Attention (concept + memory complexity)
+- [ ] BLEU Score
+- [ ] Perplexity Calculation
 
-## Other
-- Decision Tree Learning
-- Random Forest Feature Importance
-- Gradient Boosting Regressor
-- XGBoost Objective Function
-- Bagging Classifier
-- K-Means Clustering
-- Dataset: random shuffle, batch iterator, generate random subsets of a Dataset
-- Calculate Accuracy Score
-- Implement AdaBoost Fit Method
-- Implement Ridge Regression Loss Function
-- Linear Kernel Function
-- Implement Precision Metric 
-- Implement Gradient Descent Variants with MSE Loss
-- Implement Recall Metric in Binary Classification
-- Implement F-Score Calculation for Binary Classification
-- Implement Gini Impurity Calculation
-- Calculate RMSE 
-- Calculate Jaccard Index
-- Calculate Dice Score
-- Calculate F1 Score
-- Calculate MAE
-- Binary Classification with Logistic Regression
-- Train Softmax Regression with Gradient Descent 
-- Train Logistic Regression with Gradient Descent
-- Implement Layer Normalization for Sequence Data
-- Implement Efficient Sparse Window Attention
-- Implement Early Stopping Based on Validation Loss 
-- Elastic Net Regression via Gradient Descent
-- Bernoulli Naive Bayes Classifier
-- Implementing ROUGE Score
-- StepLR Learning Rate Scheduler
-- ExponentialLR Learning Rate Scheduler
-- CosineAnnealingLR Learning Rate Scheduler
-- Mixed Precision Training 
-- . Implement K-Nearest Neighbors
-- Gradient Checkpointing
-- Implement the Huber Loss Function
-- Implement Label Smoothing for Multi-Class Cross-Entropy
-- Early Stopping Based on Validation Loss Plateau
-- Implement Focal Loss for Imbalanced Classification 
-- Implement DBSCAN Clustering Algorithm
-- Gaussian Naive Bayes Classifier 
-- Implement Stratified Train-Test Split
-- Implement ROC Curve Calculation
-- Calculate AUC
-- Implement Precision-Recall Curve 
-- Implement Polynomial Kernel Function
-- Calculate SVM Margin Width
--  Implement Hinge Loss for SVM 
-- Implement Entropy-based Split Selection 
-- Implement Decision Tree for Regression
--  Implement Grid Search
-- Implement Bagging Classifier from Scratch
-- Maximum A Posteriori (MAP) Estimation for Bernoulli Parameter 
-- Implement Out-of-Bag Score Calculation
-- XGBoost Objective Function Calculation
--  Implement t-SNE Gradient Calculation 
-- Gaussian Mixture Model with EM Algorithm
-- Implement Cosine Annealing with Warm Restarts
-- Beam Search Decoding
-- Prefix Cache Hit Rate Calculator
-- KV Cache Tiered Offloading Simulator
-- Expert Parallelism Token Routing and Communication Cost
-- Disaggregated Prefill-Decode Serving Simulator
-- Embedding Quantization Quality via Cosine Similarity 
-- ASR Real-Time Factor for Parallel Chunk Transcription 
-- TTS Concurrent Real-Time Stream Capacity
-- Cold Start Latency Budget Breakdown 
-- Break-Even Pay-Per-Token API vs Dedicated GPU
-- Stochastic Gradient Descent Step for Linear Regression
-- Mini-Batch Gradient Descent Step for Linear Regression
-- Learning Curve Generator for Bias-Variance Diagnosis
-- Polynomial Regression Fit
-- Sigmoidal Accuracy-to-Log-Likelihood Scaling Law Fit
-- Combined RM and LLM Quality Filter
-- Random Forest Fit from Scratch 
-- . Implement Sigmoid Kernel Function
-- . Multinomial Naive Bayes Classifier
--  BIRCH Clustering for Large Datasets
-- Macro F1 Score for Multi-Class Classification
-- Micro F1 Score for Multi-Label Classification
-- Weighted F1 Score for Multi-Class Classification
-- Top-K Accuracy for Multi-Class Classification
-- StandardScaler Fit and Transform 
-- GPT FeedForward Block (Linear-GELU-Linear)
-- Temperature Sampling
-- Beam Seaerch Decoding
-- Compute TTFT ITL and TPS from Token Timestamp Stream
-- End-to-End Latency Decomposition
--  N-gram Speculation Dictionary Construction
-- Speculative Decoding Acceptance Rate vs Temperature
+## 16. LLM Serving & Inference
+- [ ] Tokens-per-Second Throughput
+- [ ] Compute TTFT, ITL, TPS from Token Timestamp Stream
+- [ ] End-to-End Latency Decomposition
+- [ ] Prefix Cache Hit Rate
+- [ ] KV Cache Tiered Offloading
+- [ ] N-gram Speculation Dictionary Construction
+- [ ] Speculative Decoding Acceptance Rate vs Temperature
+- [ ] Expert Parallelism Token Routing and Communication Cost
+- [ ] Disaggregated Prefill-Decode Serving
+- [ ] Cold Start Latency Budget Breakdown
+- [ ] Break-Even Pay-Per-Token API vs Dedicated GPU
+- [ ] Continuous Batching Throughput
+- [ ] PagedAttention KV Cache Utilization
+- [ ] LoRA Adapter Hot-Swap Overhead
+
+## 17. Scaling Laws & RLHF
+- [ ] Power-Law Scaling Law
+- [ ] Compute-Optimal Model Size (IsoFLOP)
+- [ ] Sigmoidal Accuracy-to-Log-Likelihood Scaling Law Fit
+- [ ] KL-Penalized Reward Shaping (RLHF)
+- [ ] RLAIF Reward Model
+- [ ] Combined RM and LLM Quality Filter
+- [ ] DPO (Direct Preference Optimization) Loss
+- [ ] PPO Clipped Objective
+- [ ] Reward Model Calibration
