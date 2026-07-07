@@ -64,3 +64,9 @@ DSA/<topic>/
 | Heap | `DSA/heap/` |
 | Matrix, Vector & Dot Product | `AI/linear-algebra/matrix-vector-dot-product/` |
 | Vector & Matrix Norms | `AI/linear-algebra/vector-norms/` |
+| Matrix Transpose, Inverse, Multiply | `AI/linear-algebra/matrix-transpose-inverse/` |
+| Eigenvalues & Eigenvectors | `AI/linear-algebra/eigenvalues-eigenvectors/` |
+| SVD | `AI/linear-algebra/svd/` |
+| Matrix Rank | `AI/linear-algebra/matrix-rank/` |
+| Orthogonality & Projections | `AI/linear-algebra/orthogonality-projections/` |
+| Matrix Decomposition (LU/QR/Cholesky) | `AI/linear-algebra/matrix-decomposition/` |

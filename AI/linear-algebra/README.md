@@ -1,2 +1,8 @@
 - [x] matrix vector dot product
 - [x] vector norms (L1/L2/Frobenius)
+- [x] matrix transpose, inverse, multiply
+- [x] eigenvalues and eigenvectors
+- [x] SVD (Singular Value Decomposition)
+- [x] rank of a matrix
+- [x] orthogonality and projections
+- [x] matrix decomposition (LU, QR, Cholesky)
