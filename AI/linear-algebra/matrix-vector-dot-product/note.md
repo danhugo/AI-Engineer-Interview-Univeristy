@@ -1,8 +1,8 @@
 # Matrix, Vector & Dot Product — Interview Knowledge Sheet
 
-## One-Line Idea
+## Intuition
 
-A **dot product** measures how much two lists of numbers line up. Almost all of deep learning — a linear layer, attention, similarity search — is just dot products stacked into matrices.
+A **dot product** measures how much two vectors point to the same direction.
 
 ---
 
@@ -251,16 +251,3 @@ A.transpose(0, 1)  # swap two dims (works for any number of dims)
 | Matrix × matrix | `(m,n) · (n,p)` | O(m·n·p) |
 
 Naive matmul is O(n³) for square matrices. Real libraries (NumPy, PyTorch) use tuned BLAS / GPU kernels, so they are far faster than a Python loop — always use them, never hand-roll loops.
-
----
-
-## 10. Interview Gotchas
-
-| Trap | Fix |
-|------|-----|
-| Used `*` for matrix multiply | `*` is elementwise. Use `@` or `matmul`. |
-| Shape mismatch error | Inner dims must match: `(m,n)·(n,p)`. Print shapes. |
-| Assumed `A B == B A` | Matmul is not commutative. Order matters. |
-| Forgot transpose on weights | Batch form is often `X @ W.T`, not `X @ W`. |
-| Mixed int and float tensors in torch | `torch.dot` needs matching dtypes; use floats. |
-| Confused dot vs cosine similarity | Cosine = dot product of **normalized** vectors. |

@@ -1,6 +1,6 @@
 # Eigenvalues & Eigenvectors — Interview Knowledge Sheet
 
-## One-Line Idea
+## Intuition
 
 An **eigenvector** is a direction a matrix does not turn — it only stretches or shrinks it. The **eigenvalue** is how much it stretches by.
 
@@ -18,6 +18,10 @@ A v = λ v
 - `λ` (lambda) — the **eigenvalue**. A single number: the scale factor.
 
 In words: multiplying `v` by the matrix `A` gives back the *same* `v`, just scaled by `λ`.
+
+![Eigenvector direction stays the same](assets/eigenvector_visualization.png)
+
+The red vector is an eigenvector. After the matrix acts on it, it stays on the same line. Only its length changes.
 
 ```
 A = [[2, 0],       v = [0,      A v = [0,      = 3 * [0,

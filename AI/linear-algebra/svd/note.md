@@ -1,6 +1,6 @@
 # SVD (Singular Value Decomposition) — Interview Knowledge Sheet
 
-## One-Line Idea
+## Intuition
 
 **Any** matrix, no matter how messy, is really just three simple steps: **rotate → stretch → rotate**. SVD pulls those three steps apart so you can see them.
 

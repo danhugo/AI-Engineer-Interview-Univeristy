@@ -1,8 +1,8 @@
 # Vector & Matrix Norms — Interview Knowledge Sheet
 
-## One-Line Idea
+## Intuition
 
-A **norm** is the *size* (length) of a vector — one number that says "how big" it is. Different norms measure "big" in different ways.
+A **norm** is a function that quantifies the size (length), magnitude of a vector, or say "how big" it is. Different norms measure "big" in different ways.
 
 ---
 

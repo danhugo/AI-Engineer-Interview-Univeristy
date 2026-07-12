@@ -1,6 +1,6 @@
 # Matrix Decomposition (LU, QR, Cholesky) — Interview Knowledge Sheet
 
-## One-Line Idea
+## Intuition
 
 **Decomposition = factoring a matrix into simpler pieces.** Like `12 = 4 × 3`, a matrix `A` splits into easy matrices (triangular, orthogonal). The pieces make hard problems — solving systems, least squares, sampling — fast and stable.
 

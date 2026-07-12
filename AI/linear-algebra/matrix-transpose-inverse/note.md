@@ -1,6 +1,6 @@
 # Matrix Transpose, Inverse & Multiply — Interview Knowledge Sheet
 
-## One-Line Idea
+## Intuition
 
 **Transpose** flips a matrix over its diagonal. **Inverse** is the "undo" of a matrix — like `1/x` but for matrices. **Multiply** chains two transforms into one.
 

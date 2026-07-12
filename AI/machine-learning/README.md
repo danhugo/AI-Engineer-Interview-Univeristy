@@ -6,15 +6,16 @@ Each one teaches a concept you must know.
 ---
 
 ## 1. Linear & Logistic Regression
-- [ ] Linear Regression — Normal Equation
-- [ ] Linear Regression — Gradient Descent
-- [ ] Ridge Regression Loss
-- [ ] Lasso Regression via ISTA
-- [ ] Elastic Net Regression via Gradient Descent
-- [ ] Polynomial Regression Fit
-- [ ] Binary Classification with Logistic Regression
-- [ ] Train Logistic Regression with Gradient Descent
-- [ ] Train Softmax Regression with Gradient Descent
+- [x] [Linear & Logistic Regression — Study Sheet](linear-logistic-regression/note.md)
+- [ ] [Linear Regression — Normal Equation](linear-logistic-regression/linear-regression-normal-equation/note.md)
+- [ ] [Linear Regression — Gradient Descent](linear-logistic-regression/linear-regression-gradient-descent/note.md)
+- [ ] [Ridge Regression Loss](linear-logistic-regression/ridge-regression-loss/note.md)
+- [ ] [Lasso Regression via ISTA](linear-logistic-regression/lasso-regression-ista/note.md)
+- [ ] [Elastic Net Regression via Gradient Descent](linear-logistic-regression/elastic-net-gradient-descent/note.md)
+- [ ] [Polynomial Regression Fit](linear-logistic-regression/polynomial-regression-fit/note.md)
+- [ ] [Binary Classification with Logistic Regression](linear-logistic-regression/binary-logistic-regression/note.md)
+- [ ] [Train Logistic Regression with Gradient Descent](linear-logistic-regression/logistic-regression-gradient-descent/note.md)
+- [ ] [Train Softmax Regression with Gradient Descent](linear-logistic-regression/softmax-regression-gradient-descent/note.md)
 
 ## 2. Loss Functions
 - [ ] MSE Loss

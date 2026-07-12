@@ -1,6 +1,6 @@
 # Rank of a Matrix — Interview Knowledge Sheet
 
-## One-Line Idea
+## Intuition
 
 The **rank** is how many rows (or columns) carry real, non-redundant information. If one row is just a copy or a scaled/added version of others, it adds nothing — it doesn't count.
 

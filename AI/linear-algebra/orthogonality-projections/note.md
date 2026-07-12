@@ -1,6 +1,6 @@
 # Orthogonality & Projections — Interview Knowledge Sheet
 
-## One-Line Idea
+## Intuition
 
 Two vectors are **orthogonal** when they point at a right angle — their dot product is 0. A **projection** is the shadow one vector casts onto another.
 
