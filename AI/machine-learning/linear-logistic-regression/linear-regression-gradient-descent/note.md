@@ -2,9 +2,23 @@
 
 ## Intuition
 
-**Gradient descent fits linear regression by repeatedly nudging weights to reduce mean squared error.**
+We learned about Linear Regression in [Linear Regression — Normal Equation](../linear-regression-normal-equation/note.md).
 
-It does not solve the answer in one step. It improves the model over many small updates.
+Now we'll find out how gradient descent is used in Linear Regression specifically and in ML/DL generally.
+
+**The error (loss) hill**
+
+The goal of ML is to minimize the error between predictions and real data. The error (loss) function is a hilly surface. Each point on it is one set of model parameters, and its height is how wrong the model is. You start at a random point (random parameters), somewhere on the hill — not the lowest.
+
+**The gradient**
+
+The gradient is like a compass. It is a vector pointing in the uphill direction, and its size represents the steepness at where you stand (for each model parameter). It tells you which way is up.
+
+**The descent**
+
+To reach the lowest point, go in the opposite direction of the gradient — this is the descent. Take a step downhill, feel the slope again, and repeat until you reach the bottom.
+
+Different problems use different loss functions — that is, different hill shapes. For Linear Regression, we use Mean Squared Error (MSE). The reason for choosing MSE is explained in the next sections.
 
 ---
 
@@ -30,9 +44,7 @@ MSE = mean((y_hat - y)²)
 
 Intuition:
 
-- small errors are okay
-- large errors hurt much more
-- the squared loss is smooth, so gradients are easy to compute
+- 
 
 ---
 
