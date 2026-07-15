@@ -6,7 +6,7 @@ Each one teaches a concept you must know.
 ---
 
 ## 1. Linear & Logistic Regression
-- [x] [Linear & Logistic Regression — Study Sheet](linear-logistic-regression/note.md)
+- [x] Linear & Logistic Regression — Study Sheet
 - [ ] [Linear Regression — Normal Equation](linear-logistic-regression/linear-regression-normal-equation/note.md)
 - [ ] [Linear Regression — Gradient Descent](linear-logistic-regression/linear-regression-gradient-descent/note.md)
 - [ ] [Ridge Regression Loss](linear-logistic-regression/ridge-regression-loss/note.md)
