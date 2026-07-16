@@ -2,23 +2,36 @@
 
 ---
 
-## Core Idea
+## Intuition
 
-**Q: What is Ridge regression?**
+**Q: What is ridge regression?**
 A: Linear regression with an L2 penalty on the weights.
 
-**Q: What is the Ridge loss?**
-A: `MSE + alpha * sum(w²)`.
+**Q: Does ridge change the prediction formula?**
+A: No. Prediction is still `Xw + b`.
 
-**Q: Does Ridge change the prediction formula?**
-A: No. Prediction is still `y_hat = Xw + b`.
+**Q: What changes in ridge?**
+A: The loss includes a penalty for large weights.
 
 ---
 
-## Regularization
+## 1. Why Regularize?
 
-**Q: Why add a weight penalty?**
-A: To discourage very large weights and reduce overfitting.
+**Q: When can ordinary linear regression become unstable?**
+A: When features are correlated, numerous, or the data is small or noisy.
+
+**Q: Why are very large weights risky?**
+A: They make predictions sensitive to small input changes.
+
+**Q: What does ridge prefer?**
+A: Smaller, more stable weights.
+
+---
+
+## 2. The Ridge Objective
+
+**Q: What two parts are in the ridge loss?**
+A: Prediction error and an L2 weight penalty.
 
 **Q: What does `alpha` control?**
 A: The strength of the regularization penalty.
@@ -26,54 +39,90 @@ A: The strength of the regularization penalty.
 **Q: What happens when `alpha = 0`?**
 A: Ridge becomes ordinary linear regression.
 
-**Q: What can happen when `alpha` is too large?**
-A: The model may underfit because weights are shrunk too much.
+---
+
+## 3. What L2 Does
+
+**Q: Why does L2 discourage large weights?**
+A: Squaring makes large weights expensive.
+
+**Q: Does ridge usually make weights exactly zero?**
+A: No. It usually shrinks weights smoothly toward zero.
+
+**Q: What model can create exact zero weights?**
+A: Lasso.
 
 ---
 
-## Bias
+## 4. Bias Term
 
-**Q: Should Ridge regularize the bias?**
+**Q: Should ridge regularize the bias?**
 A: Usually no.
 
 **Q: Why not regularize the bias?**
-A: The bias only shifts predictions up or down; penalizing it usually does not help control feature complexity.
+A: The bias is the baseline prediction, not a feature strength.
 
-**Q: If `theta = [b, w1, w2]`, which values are regularized?**
-A: Only `theta[1:]`, not `theta[0]`.
-
----
-
-## NumPy
-
-**Q: What is the NumPy Ridge-loss pattern?**
-A: Compute predictions, compute MSE, add `alpha * np.sum(w ** 2)`.
-
-**Q: Why keep `w` and `b` separate?**
-A: It makes it harder to accidentally regularize the bias.
+**Q: If `theta = [b, w1, w2]`, what should be penalized?**
+A: Only `theta[1:]`.
 
 ---
 
-## PyTorch
+## 5. Gradient
 
-**Q: What PyTorch loss is used for the prediction part?**
-A: `torch.nn.MSELoss`.
+**Q: What is added to the weight gradient by ridge?**
+A: `2 * alpha * w`.
 
-**Q: For `torch.nn.Linear`, what should be regularized?**
-A: `model.weight`.
-
-**Q: Should `model.bias` be included in the Ridge penalty?**
+**Q: Does the bias gradient get a ridge term?**
 A: No.
 
-**Q: Where do you add the Ridge penalty during training?**
-A: Add it to the MSE loss before calling `loss.backward()`.
+**Q: What is the MSE weight gradient?**
+A: `(2 / n) * X.T @ error`.
 
 ---
 
-## Comparison
+## 6. NumPy Pattern
 
-**Q: How is Ridge different from Lasso?**
-A: Ridge uses squared weights and shrinks weights smoothly. Lasso uses absolute weights and can set weights exactly to zero.
+**Q: How do you compute ridge loss in NumPy?**
+A: Compute MSE, then add `alpha * np.sum(w ** 2)`.
 
-**Q: When is Ridge useful?**
-A: When features are correlated, noisy, or numerous and you want a more stable linear model.
+**Q: How do you avoid regularizing the bias?**
+A: Keep `w` and `b` separate or exclude `theta[0]`.
+
+---
+
+## 7. PyTorch Pattern
+
+**Q: What should be regularized in `torch.nn.Linear`?**
+A: `model.weight`.
+
+**Q: Should `model.bias` be included?**
+A: No.
+
+**Q: When do you add the ridge penalty?**
+A: Add it to the loss before `backward()`.
+
+---
+
+## 8. Ridge vs Lasso
+
+**Q: What penalty does ridge use?**
+A: L2, `sum(w^2)`.
+
+**Q: What penalty does lasso use?**
+A: L1, `sum(abs(w))`.
+
+**Q: When is ridge a good choice?**
+A: When you want stable weights and do not need exact feature selection.
+
+---
+
+## 9. Interview Gotchas
+
+**Q: Why does feature scaling matter?**
+A: The penalty acts on coefficient size, so scale affects the penalty.
+
+**Q: What happens if `alpha` is too large?**
+A: The model can underfit.
+
+**Q: What is the core ridge summary?**
+A: Same linear model, MSE plus L2 weight penalty.

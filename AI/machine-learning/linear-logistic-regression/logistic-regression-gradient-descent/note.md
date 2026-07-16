@@ -22,9 +22,9 @@ Training means finding `w` and `b` by **gradient descent**.
 
 We compute a logit, then turn it into a probability with sigmoid:
 
-```
-p = sigmoid(logit) = 1 / (1 + exp(-logit))
-```
+$$
+p = \sigma(\text{logit}) = \frac{1}{1 + e^{-\text{logit}}}
+$$
 
 | Logit | Probability |
 |-------|------------|
@@ -58,27 +58,27 @@ Linear regression uses MSE, which comes from MLE assuming Gaussian errors. But o
 
 Each label is a Bernoulli trial: value 1 with probability `p`, value 0 with probability `1-p`. Its probability mass function:
 
-```
-P(Y = y) = p^y * (1-p)^(1-y)
-```
+$$
+P(Y = y) = p^y(1-p)^{1-y}
+$$
 
 Step 1 — **Likelihood** (product over all samples, since labels are independent):
 
-```
-L = ∏ p_i^{y_i} * (1-p_i)^{1-y_i}
-```
+$$
+L = \prod_{i=1}^{n} p_i^{y_i}(1-p_i)^{1-y_i}
+$$
 
 Step 2 — **Log-likelihood** (turn products into sums, avoid underflow from multiplying many small numbers):
 
-```
-log L = Σ [ y_i*log(p_i) + (1-y_i)*log(1-p_i) ]
-```
+$$
+\log L = \sum_{i=1}^{n} \left[y_i \log(p_i) + (1-y_i)\log(1-p_i)\right]
+$$
 
 Step 3 — **Flip to minimization** (gradient descent minimizes, so multiply by -1):
 
-```
-BCE = -Σ [ y_i*log(p_i) + (1-y_i)*log(1-p_i) ]
-```
+$$
+\text{BCE} = -\sum_{i=1}^{n} \left[y_i \log(p_i) + (1-y_i)\log(1-p_i)\right]
+$$
 
 That is binary cross-entropy.
 
@@ -99,23 +99,24 @@ Confident right predictions are cheap. Confident wrong predictions blow up towar
 
 Sigmoid has a tidy derivative:
 
-```
-sigmoid'(z) = sigmoid(z) * (1 - sigmoid(z))
-```
+$$
+\sigma'(z) = \sigma(z)(1 - \sigma(z))
+$$
 
 When we differentiate BCE w.r.t. the logit `z`, chain rule gives:
 
-```
-dL/dz = dL/dp · dp/dz
-      = [ (p - y) / (p(1-p)) ] · [ p(1-p) ]
-      = p - y
-```
+$$
+\frac{dL}{dz}
+= \frac{dL}{dp} \cdot \frac{dp}{dz}
+= \frac{p-y}{p(1-p)} \cdot p(1-p)
+= p-y
+$$
 
 The `p(1-p)` denominator from BCE cancels exactly with the `p(1-p)` from the sigmoid derivative. The result is wonderfully clean:
 
-```
-dL/dz = p - y
-```
+$$
+\frac{dL}{dz} = p-y
+$$
 
 So the prediction error `p - y` is the gradient w.r.t. each logit.
 

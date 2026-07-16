@@ -2,76 +2,114 @@
 
 ---
 
-## Core Idea
+## Intuition
 
-**Q: What is Lasso regression?**
+**Q: What is lasso regression?**
 A: Linear regression with an L1 penalty on the weights.
 
-**Q: What is the Lasso objective?**
-A: `mean((Xw + b - y)^2) + alpha * sum(abs(w))`.
+**Q: What can lasso do that ridge usually does not?**
+A: It can set some weights exactly to zero.
 
-**Q: Do we regularize the bias?**
-A: No. The penalty is applied to the feature weights, not the bias.
+**Q: What are the two moves in ISTA?**
+A: A gradient step, then soft-thresholding.
 
 ---
 
-## L1 Intuition
+## 1. The Lasso Objective
 
-**Q: Why does Lasso create sparse models?**
-A: The L1 penalty can push small weights exactly to zero.
+**Q: Does lasso change the prediction formula?**
+A: No. Prediction is still `Xw + b`.
+
+**Q: What penalty does lasso use?**
+A: The L1 norm, `sum(abs(w))`.
+
+**Q: Should lasso regularize the bias?**
+A: No. Regularize `w`, not `b`.
+
+---
+
+## 2. Why L1 Creates Sparsity
+
+**Q: Why does L1 create sparse weights?**
+A: It can pull small weights all the way to exactly zero.
 
 **Q: What does a zero weight mean?**
-A: The model is ignoring that feature.
+A: The model ignores that feature.
 
-**Q: How is Lasso different from Ridge?**
-A: Ridge shrinks weights smoothly. Lasso can shrink some weights all the way to zero.
-
----
-
-## Soft-Thresholding
-
-**Q: What does soft-thresholding do?**
-A: It moves values toward zero and sets small values exactly to zero.
-
-**Q: What is the formula?**
-A: `sign(x) * max(abs(x) - threshold, 0)`.
-
-**Q: Why does ISTA need soft-thresholding?**
-A: It handles the L1 part of the objective, which is not differentiable at zero.
+**Q: How is lasso different from ridge?**
+A: Ridge shrinks smoothly. Lasso can create exact zeros.
 
 ---
 
-## ISTA
+## 3. Why ISTA?
+
+**Q: Why is plain gradient descent awkward for lasso?**
+A: L1 is not differentiable at zero.
 
 **Q: What does ISTA stand for?**
 A: Iterative Shrinkage-Thresholding Algorithm.
 
-**Q: What are the two parts of one ISTA step?**
-A: A gradient step on MSE, then soft-thresholding on the weights.
-
-**Q: What update is used for the bias?**
-A: A normal gradient descent update, because the bias is not L1-regularized.
+**Q: What part of lasso does soft-thresholding handle?**
+A: The L1 penalty.
 
 ---
 
-## Implementation
+## 4. Soft-Thresholding
+
+**Q: What does soft-thresholding do?**
+A: It shrinks values toward zero and sets small values to zero.
+
+**Q: What happens to `0.2` with threshold `0.5`?**
+A: It becomes `0`.
+
+**Q: Why is soft-thresholding useful?**
+A: It creates exact zeros naturally.
+
+---
+
+## 5. ISTA Update
 
 **Q: What is the MSE gradient for weights?**
-A: `(2 / n) * X.T @ (pred - y)`.
+A: `(2 / n) * X.T @ error`.
 
-**Q: What is the MSE gradient for bias?**
-A: `(2 / n) * sum(pred - y)`.
+**Q: How is `w` updated in ISTA?**
+A: Take a gradient step, then apply soft-thresholding.
+
+**Q: How is `b` updated?**
+A: With a normal gradient step.
+
+---
+
+## 6. NumPy and PyTorch Pattern
+
+**Q: What is the NumPy soft-threshold pattern?**
+A: `np.sign(x) * np.maximum(np.abs(x) - t, 0)`.
+
+**Q: What is the PyTorch soft-threshold pattern?**
+A: `torch.sign(x) * torch.clamp(torch.abs(x) - t, min=0)`.
+
+**Q: Why use manual updates here?**
+A: They show the lasso/ISTA idea clearly.
+
+---
+
+## 7. Complexity
+
+**Q: What is the cost of one ISTA step?**
+A: `O(nd)`.
+
+**Q: What operations dominate the cost?**
+A: `X @ w` and `X.T @ error`.
+
+---
+
+## 8. Interview Gotchas
+
+**Q: Why does feature scaling matter?**
+A: L1 penalizes coefficient size, so scale affects the penalty.
 
 **Q: What happens when `alpha` increases?**
 A: More weights are pushed toward zero.
 
-**Q: Why should features be scaled before Lasso?**
-A: Because the penalty acts directly on coefficient size, so feature scale affects which weights are punished most.
-
----
-
-## Complexity
-
-**Q: What is the cost of one ISTA step?**
-A: O(nd) for `n` examples and `d` features.
-
+**Q: What is the core lasso summary?**
+A: Linear regression plus L1 penalty, trained here with ISTA.

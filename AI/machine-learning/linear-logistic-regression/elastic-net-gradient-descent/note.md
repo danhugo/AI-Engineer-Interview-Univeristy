@@ -2,115 +2,164 @@
 
 ## Intuition
 
-**Elastic Net is linear regression with both L1 and L2 penalties.** It combines Lasso-style feature selection with Ridge-style stability.
+Elastic Net is **linear regression with both L1 and L2 penalties**.
+
+It combines:
+
+- lasso's feature selection
+- ridge's smooth shrinkage
+
+The model is still:
+
+```
+y_hat = Xw + b
+```
+
+Only the loss changes.
 
 ---
 
-## 1. Objective
+## 1. The Objective
 
 Elastic Net uses:
 
-```
-loss = mean((Xw + b - y)^2)
-     + l1 * sum(abs(w))
-     + l2 * sum(w^2)
-```
+$$
+\text{loss}
+= \frac{1}{n}\|Xw + b - y\|_2^2
++ \lambda_1\|w\|_1
++ \lambda_2\|w\|_2^2
+$$
 
-As with most regularized linear models:
+Where:
 
-- regularize the weights `w`
-- do not regularize the bias `b`
+- `lambda_1` controls the L1 penalty
+- `lambda_2` controls the L2 penalty
 
-The bias is not a feature strength. It is just the baseline prediction.
+Regularize `w`, not `b`.
 
 ---
 
 ## 2. Why Combine L1 and L2?
 
-L1 helps with sparsity:
+L1 can set weights exactly to zero:
 
 ```
-some weights become exactly zero
+feature selection
 ```
 
-L2 helps with stability:
+L2 discourages large weights smoothly:
 
 ```
-large weights are discouraged smoothly
+stability
 ```
 
-Elastic Net is useful when features are correlated. Pure Lasso may choose one correlated feature and ignore the others. Elastic Net often spreads weight more smoothly while still shrinking unhelpful features.
+Elastic Net is useful when features are correlated. Pure lasso may choose one feature from a correlated group and ignore the others. Elastic Net can keep groups more stable while still shrinking weak features.
 
 ---
 
-## 3. Gradients and Subgradients
+## 3. Relation to Ridge and Lasso
 
-The MSE part has the normal gradient:
+Elastic Net includes ridge and lasso as special cases.
 
-```
-pred = Xw + b
-residual = pred - y
+| Penalties | Model |
+|-----------|-------|
+| `lambda_1 > 0`, `lambda_2 = 0` | lasso |
+| `lambda_1 = 0`, `lambda_2 > 0` | ridge |
+| `lambda_1 > 0`, `lambda_2 > 0` | elastic net |
 
-grad_mse_w = (2 / n) * X.T @ residual
-grad_mse_b = (2 / n) * sum(residual)
-```
-
-The L2 penalty gradient is:
-
-```
-2 * l2 * w
-```
-
-The L1 penalty uses a subgradient:
-
-```
-l1 * sign(w)
-```
-
-At exactly zero, the true subgradient is a range. In simple interview code, `sign(0) = 0` is a common practical choice.
+This makes Elastic Net a middle ground.
 
 ---
 
-## 4. Gradient Descent Update
+## 4. Gradients and Subgradients
 
-The weight gradient is:
+The MSE weight gradient is:
 
-```
-grad_w = grad_mse_w + l1 * sign(w) + 2 * l2 * w
-```
+$$
+g_{\text{mse},w}
+= \frac{2}{n}X^T(Xw + b - y)
+$$
 
-The bias gradient is only:
+The bias gradient is:
 
-```
-grad_b = grad_mse_b
-```
+$$
+g_b
+= \frac{2}{n}\sum_{i=1}^{n}(\hat{y}_i-y_i)
+$$
 
-Then update:
+The L2 gradient is:
 
-```
-w = w - lr * grad_w
-b = b - lr * grad_b
-```
+$$
+2\lambda_2 w
+$$
+
+The L1 term uses a subgradient:
+
+$$
+\lambda_1\operatorname{sign}(w)
+$$
+
+At zero, the L1 subgradient is a range. Simple interview code often uses `sign(0) = 0`.
 
 ---
 
-## 5. Interview Gotchas
+## 5. Gradient Descent Update
 
-- Do not regularize the bias.
-- L1 uses a subgradient, not an ordinary derivative everywhere.
-- L2 gradient is `2 * l2 * w` when the penalty is `l2 * sum(w^2)`.
-- Feature scaling matters because regularization penalizes coefficient size.
-- Gradient descent needs a reasonable learning rate.
+Using a simple subgradient update:
+
+```
+pred = X @ w + b
+error = pred - y
+
+grad_w = (2 / n) * X.T @ error
+grad_w += lambda_1 * sign(w)
+grad_w += 2 * lambda_2 * w
+
+grad_b = (2 / n) * sum(error)
+
+w -= lr * grad_w
+b -= lr * grad_b
+```
+
+Only `w` gets regularization terms.
+
+The bias uses only the prediction-error gradient.
 
 ---
 
-## 6. Complexity
+## 6. Subgradient vs Proximal Update
 
-One gradient descent step costs:
+The simple update above is easy to explain.
 
-```
+But L1 penalties are often handled better with proximal methods, like soft-thresholding.
+
+Why?
+
+- subgradient descent may not create exact zeros cleanly
+- proximal updates are designed for non-smooth penalties
+
+For interview code, the simple subgradient version is acceptable if you explain the tradeoff.
+
+---
+
+## 7. Complexity
+
+For `n` samples and `d` features, one gradient step costs:
+
+$$
 O(nd)
-```
+$$
 
-for `n` examples and `d` features.
+The expensive operations are `X @ w` and `X.T @ error`.
 
+---
+
+## 8. Interview Gotchas
+
+- Elastic Net combines L1 and L2 penalties.
+- L1 can create sparsity.
+- L2 improves stability when features are correlated.
+- Do not regularize the bias.
+- Feature scaling matters.
+- The L1 term is not differentiable at zero.
+- Simple subgradient descent is easy to explain, but proximal methods handle L1 better.

@@ -2,42 +2,42 @@
 
 ## Intuition
 
-**Binary logistic regression turns a linear score into a probability for class 1.**
+Binary logistic regression is a **classification** model for two classes.
 
-It is used when the answer has two classes:
+Linear regression predicts any real number. Binary classification needs a probability between `0` and `1`.
 
-- spam or not spam
-- fraud or not fraud
-- click or no click
-- disease or no disease
+So logistic regression does two steps:
 
----
+```
+linear score -> sigmoid -> probability of class 1
+```
 
-## 1. Linear Score First
-
-The model starts with the same score as linear regression:
+The model:
 
 ```
 logit = Xw + b
+prob  = sigmoid(logit)
 ```
 
-This raw score is called a **logit**.
-
-- Large positive logit → class 1 is likely
-- Large negative logit → class 0 is likely
-- Logit near 0 → unsure
-
-The logit is not a probability yet. It can be any real number.
+The probability is not a class yet. You still need a threshold.
 
 ---
 
-## 2. Sigmoid Turns Scores Into Probabilities
+## 1. The Model
 
-Sigmoid squashes any real number into the range `[0, 1]`:
+The linear part is:
 
-```
-p = sigmoid(logit) = 1 / (1 + exp(-logit))
-```
+$$
+z = Xw + b
+$$
+
+`z` is the **logit**.
+
+The sigmoid turns the logit into a probability:
+
+$$
+p = P(y=1 \mid x) = \frac{1}{1 + e^{-z}}
+$$
 
 Interpretation:
 
@@ -47,86 +47,140 @@ Interpretation:
 | 0 | 0.5 |
 | large positive | near 1 |
 
-So logistic regression predicts:
+---
 
-```
-P(y = 1 | x)
-```
+## 2. Log-Odds Meaning
+
+Logistic regression is linear in the **log-odds**:
+
+$$
+\log\left(\frac{p}{1-p}\right) = Xw + b
+$$
+
+The left side is called the logit.
+
+That is why the raw score is called a logit. The model learns a linear rule for log-odds, then converts it to probability with sigmoid.
 
 ---
 
-## 3. Probabilities Become Classes With a Threshold
+## 3. Bernoulli Assumption
 
-A probability is not a class label until we choose a threshold.
+Binary labels are usually modeled as Bernoulli trials.
 
-The common default is:
+For one sample:
 
-```
-if p >= 0.5: predict 1
-else:        predict 0
-```
+$$
+P(Y=y) = p^y(1-p)^{1-y}
+$$
 
-In interviews, mention that `0.5` is not always best.
+If `y = 1`, this becomes `p`.
 
-For fraud or medical screening, you may lower the threshold to catch more positives. That often increases recall but may create more false positives.
+If `y = 0`, this becomes `1-p`.
+
+For the whole dataset, the likelihood is:
+
+$$
+L = \prod_{i=1}^{n} p_i^{y_i}(1-p_i)^{1-y_i}
+$$
+
+Taking negative log gives binary cross-entropy.
 
 ---
 
 ## 4. Binary Cross-Entropy
 
-Logistic regression usually trains with **binary cross-entropy**:
+The loss is:
 
-```
-loss = -mean(y * log(p) + (1 - y) * log(1 - p))
-```
+$$
+\text{BCE} =
+-\frac{1}{n}\sum_{i=1}^{n}
+\left[y_i\log(p_i) + (1-y_i)\log(1-p_i)\right]
+$$
 
 Intuition:
 
-- If the true label is `1`, we want `p` close to `1`.
-- If the true label is `0`, we want `p` close to `0`.
-- Confident wrong predictions get punished strongly.
+- true label `1` -> want `p` close to `1`
+- true label `0` -> want `p` close to `0`
+- confident wrong predictions get punished strongly
 
 In NumPy, clip probabilities before taking logs:
 
 ```
-p = clip(p, eps, 1 - eps)
+p = np.clip(p, eps, 1 - eps)
 ```
 
 This avoids `log(0)`.
 
 ---
 
-## 5. PyTorch: BCEWithLogitsLoss
+## 5. Thresholding
 
-In PyTorch, prefer:
-
-```
-torch.nn.BCEWithLogitsLoss()
-```
-
-It expects raw logits, not sigmoid probabilities.
-
-Correct:
+A probability becomes a class only after thresholding:
 
 ```
-loss = BCEWithLogitsLoss()(logits, labels)
+if p >= 0.5: predict 1
+else:        predict 0
 ```
 
-Avoid:
+The `0.5` threshold is common, but not always best.
 
-```
-loss = BCEWithLogitsLoss()(sigmoid(logits), labels)
-```
-
-Why? `BCEWithLogitsLoss` combines sigmoid and binary cross-entropy in a numerically stable way.
+For fraud detection or medical screening, false negatives may be expensive. You might lower the threshold to catch more positives. That can increase recall but also increases false positives.
 
 ---
 
-## 6. Interview Gotchas
+## 6. Decision Boundary
 
-- Logistic regression is a classification model, even though it has "regression" in the name.
-- The output of sigmoid is a probability for class `1`.
-- The model learns a linear decision boundary in feature space.
-- Use logits for PyTorch loss functions when the loss name says "with logits."
-- Use probabilities for human-facing interpretation and thresholding.
+With threshold `0.5`, the boundary happens when:
 
+$$
+p = 0.5
+$$
+
+Sigmoid gives `0.5` when:
+
+$$
+Xw + b = 0
+$$
+
+So logistic regression has a **linear decision boundary** in the input features.
+
+The probabilities are nonlinear because of sigmoid. The boundary is still linear.
+
+---
+
+## 7. PyTorch Pattern
+
+Use raw logits with `BCEWithLogitsLoss`:
+
+```python
+logits = model(X)
+loss = torch.nn.BCEWithLogitsLoss()(logits, y)
+```
+
+Do not apply sigmoid before this loss:
+
+```python
+# Wrong
+loss = torch.nn.BCEWithLogitsLoss()(torch.sigmoid(logits), y)
+```
+
+`BCEWithLogitsLoss` combines sigmoid and BCE in a numerically stable way.
+
+Use sigmoid later for interpretation:
+
+```python
+probs = torch.sigmoid(logits)
+preds = (probs >= 0.5).long()
+```
+
+---
+
+## 8. Interview Gotchas
+
+- Logistic regression is classification, despite the name.
+- The model predicts `P(y=1 | x)`.
+- The raw output is a logit, not a probability.
+- Use BCE for binary labels.
+- Use logits with PyTorch `BCEWithLogitsLoss`.
+- Choose the threshold based on the cost of mistakes.
+- The decision boundary is linear when using the original features.

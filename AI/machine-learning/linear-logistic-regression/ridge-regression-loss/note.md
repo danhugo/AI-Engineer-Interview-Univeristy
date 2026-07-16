@@ -2,129 +2,188 @@
 
 ## Intuition
 
-**Ridge regression is linear regression plus a penalty for large weights.**
+Ridge regression is **linear regression with a penalty for large weights**.
 
-It uses mean squared error for prediction quality and an L2 penalty for simpler weights:
+Ordinary linear regression only asks:
 
 ```
-loss = MSE + alpha * sum(w²)
+How close are the predictions to y?
 ```
 
----
+Ridge also asks:
 
-## 1. Why Regularize?
+```
+Are the weights too large?
+```
 
-Linear regression can overfit when:
-
-- there are many features
-- features are correlated
-- the dataset is small or noisy
-
-Ridge discourages very large weights, which often makes the model more stable on new data.
-
----
-
-## 2. The Model
-
-The prediction is still ordinary linear regression:
+The model is still:
 
 ```
 y_hat = Xw + b
 ```
 
-Ridge does not change the prediction formula.
-
-It changes the loss used to choose the parameters.
+Only the loss changes.
 
 ---
 
-## 3. The Ridge Loss
+## 1. Why Regularize?
 
-The loss has two parts:
+Linear regression can become unstable when:
 
-```
-prediction_loss = mean((y_hat - y)²)
-penalty = alpha * sum(w²)
-total_loss = prediction_loss + penalty
-```
+- features are highly correlated
+- there are many features
+- the dataset is small or noisy
 
-`alpha` controls the strength of regularization.
+In those cases, many different weight vectors can fit the training data almost equally well. Some of those vectors use very large weights.
 
-- `alpha = 0` means ordinary linear regression
-- larger `alpha` means stronger weight shrinking
+Large weights make predictions sensitive to small input changes.
+
+Ridge discourages that by preferring smaller weights.
 
 ---
 
-## 4. Do Not Regularize the Bias
+## 2. The Ridge Objective
 
-The bias is usually not regularized.
+The ridge loss is:
 
-Regularizing the bias would punish the model for shifting predictions up or down. That usually does not help with overfitting in the same way large feature weights do.
+$$
+\text{loss}
+= \frac{1}{n}\|Xw + b - y\|_2^2
++ \alpha\|w\|_2^2
+$$
 
-So if:
+The first term measures prediction error.
+
+The second term penalizes large weights:
+
+$$
+\|w\|_2^2 = \sum_{j=1}^{d} w_j^2
+$$
+
+`alpha` controls regularization strength.
+
+| Alpha | Effect |
+|-------|--------|
+| `0` | ordinary linear regression |
+| small | light shrinkage |
+| large | strong shrinkage, possible underfitting |
+
+---
+
+## 3. What L2 Does
+
+The L2 penalty grows quickly for large weights.
+
+Example:
+
+$$
+10^2 = 100
+$$
+
+So ridge strongly discourages one feature from getting a huge coefficient.
+
+It usually shrinks weights toward zero, but does not make them exactly zero.
+
+That is the key difference from lasso.
+
+---
+
+## 4. Bias Term
+
+Usually do not regularize the bias.
+
+If:
 
 ```
 theta = [b, w1, w2, w3]
 ```
 
-the penalty should use only:
+the ridge penalty should use only:
 
 ```
 theta[1:]
 ```
 
+The bias is the baseline prediction. Penalizing it does not control feature complexity in the same way.
+
 ---
 
-## 5. NumPy Pattern
+## 5. Gradient
+
+For:
+
+$$
+\text{loss}
+= \frac{1}{n}\|Xw + b - y\|_2^2
++ \alpha\|w\|_2^2
+$$
+
+the gradients are:
+
+$$
+\nabla_w =
+\frac{2}{n}X^T(Xw + b - y) + 2\alpha w
+$$
+
+$$
+\nabla_b =
+\frac{2}{n}\sum_{i=1}^{n}(\hat{y}_i - y_i)
+$$
+
+The bias gradient has no ridge term.
+
+---
+
+## 6. NumPy Pattern
 
 ```python
 pred = X @ w + b
-mse = np.mean((pred - y) ** 2)
+error = pred - y
+
+mse = np.mean(error ** 2)
 penalty = alpha * np.sum(w ** 2)
 loss = mse + penalty
-```
 
-Keep the function small and explicit.
+dw = (2 / n) * X.T @ error + 2 * alpha * w
+db = (2 / n) * np.sum(error)
+```
 
 ---
 
-## 6. PyTorch Pattern
+## 7. PyTorch Pattern
 
 ```python
 pred = model(X)
 mse = torch.nn.MSELoss()(pred, y)
 penalty = alpha * torch.sum(model.weight ** 2)
 loss = mse + penalty
+
+loss.backward()
+optimizer.step()
+optimizer.zero_grad()
 ```
 
-For `torch.nn.Linear`, the bias is stored separately in `model.bias`, so only regularize `model.weight`.
+For `torch.nn.Linear`, regularize `model.weight`, not `model.bias`.
 
 ---
 
-## 7. Ridge vs Lasso
+## 8. Ridge vs Lasso
 
-Ridge uses an L2 penalty:
+| Model | Penalty | Effect |
+|-------|---------|--------|
+| Ridge | L2, `sum(w^2)` | smooth shrinkage |
+| Lasso | L1, `sum(abs(w))` | can create exact zeros |
 
-```
-sum(w²)
-```
-
-It shrinks weights smoothly but usually does not make them exactly zero.
-
-Lasso uses an L1 penalty:
-
-```
-sum(abs(w))
-```
-
-It can push some weights exactly to zero.
+Use ridge when you want stability and do not need feature selection.
 
 ---
 
-## Interview Gotchas
+## 9. Interview Gotchas
 
 - Ridge changes the loss, not the prediction formula.
-- Do not regularize the bias term.
 - `alpha` is a hyperparameter.
-- Bigger `alpha` usually means smaller weights but potentially more underfitting.
-- In PyTorch, add the penalty to the loss before `backward()`.
+- Larger `alpha` means stronger shrinkage.
+- Ridge helps with correlated features and unstable weights.
+- Ridge usually does not create exact zero weights.
+- Do not regularize the bias.
+- Feature scaling matters because the penalty acts on coefficient size.

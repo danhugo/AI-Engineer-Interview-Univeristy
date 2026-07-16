@@ -2,82 +2,117 @@
 
 ---
 
-## Core Idea
+## Intuition
 
 **Q: What is binary logistic regression used for?**
 A: Binary classification, where each example belongs to class `0` or class `1`.
 
-**Q: What does logistic regression output?**
-A: A probability that the example belongs to class `1`.
+**Q: What does the model output after sigmoid?**
+A: A probability for class `1`.
 
-**Q: Why is it called logistic regression if it is used for classification?**
-A: It models log-odds with a linear function, then turns that score into a probability.
+**Q: What are the two main steps?**
+A: Compute a linear score, then pass it through sigmoid.
 
 ---
 
-## Logits and Sigmoid
+## 1. The Model
 
 **Q: What is a logit?**
-A: The raw linear score `Xw + b` before sigmoid.
+A: The raw linear score `Xw + b`.
 
-**Q: Can a logit be outside `[0, 1]`?**
-A: Yes. A logit can be any real number.
+**Q: Can a logit be any real number?**
+A: Yes. It is not a probability yet.
 
 **Q: What does sigmoid do?**
-A: It maps any real-valued logit to a probability between `0` and `1`.
-
-**Q: What probability does logit `0` map to?**
-A: `0.5`.
-
-**Q: What does a large positive logit mean?**
-A: The predicted probability for class `1` is close to `1`.
+A: It maps the logit to a probability between `0` and `1`.
 
 ---
 
-## Thresholding
+## 2. Log-Odds Meaning
 
-**Q: How do you convert a probability into a class prediction?**
-A: Compare it to a threshold, usually `0.5`.
+**Q: What does logistic regression model linearly?**
+A: The log-odds of class `1`.
 
-**Q: Is `0.5` always the best threshold?**
-A: No. The best threshold depends on the cost of false positives and false negatives.
+**Q: What are odds?**
+A: Odds are `p / (1-p)`.
 
-**Q: What happens if you lower the threshold?**
-A: The model predicts more positives, which can increase recall but also false positives.
+**Q: Why is the raw score called a logit?**
+A: It is the log of the odds.
 
 ---
 
-## Binary Cross-Entropy
+## 3. Bernoulli Assumption
 
-**Q: What loss is commonly used for binary logistic regression?**
+**Q: What distribution is used for binary labels?**
+A: Bernoulli.
+
+**Q: What does the likelihood multiply?**
+A: The probabilities assigned to the observed labels.
+
+**Q: What loss comes from negative log-likelihood?**
 A: Binary cross-entropy.
 
-**Q: What is the intuition for binary cross-entropy?**
-A: It rewards high probability on the true class and strongly punishes confident wrong predictions.
+---
 
-**Q: Why do we clip probabilities in a NumPy BCE implementation?**
-A: To avoid `log(0)`, which is undefined.
+## 4. Binary Cross-Entropy
+
+**Q: What does BCE reward?**
+A: High probability on the true class.
+
+**Q: What does BCE punish strongly?**
+A: Confident wrong predictions.
+
+**Q: Why clip probabilities in NumPy?**
+A: To avoid `log(0)`.
 
 ---
 
-## PyTorch
+## 5. Thresholding
 
-**Q: What PyTorch loss should you use for binary logistic regression logits?**
-A: `torch.nn.BCEWithLogitsLoss`.
+**Q: How do you convert probability to a class?**
+A: Compare it to a threshold, often `0.5`.
+
+**Q: Is `0.5` always best?**
+A: No. It depends on the cost of false positives and false negatives.
+
+**Q: What happens when you lower the threshold?**
+A: The model predicts more positives, often increasing recall and false positives.
+
+---
+
+## 6. Decision Boundary
+
+**Q: Where is the `0.5` decision boundary?**
+A: Where the logit `Xw + b` equals `0`.
+
+**Q: Is the decision boundary linear?**
+A: Yes, if the original input features are used.
+
+**Q: Are the probabilities linear?**
+A: No. Sigmoid makes probabilities nonlinear.
+
+---
+
+## 7. PyTorch Pattern
+
+**Q: What PyTorch loss should you use with logits?**
+A: `BCEWithLogitsLoss`.
 
 **Q: Should you apply sigmoid before `BCEWithLogitsLoss`?**
-A: No. It already includes sigmoid internally.
+A: No. The loss includes sigmoid internally.
 
-**Q: When should you apply sigmoid in PyTorch?**
-A: During inference, when you want probabilities or thresholded class predictions.
+**Q: When should you apply sigmoid?**
+A: During inference, when you want probabilities or thresholded predictions.
 
 ---
 
-## Gotchas
+## 8. Interview Gotchas
 
-**Q: What is the decision boundary for logistic regression?**
-A: A linear boundary where the logit is `0`, which corresponds to probability `0.5`.
+**Q: Why is it called regression?**
+A: It uses a linear model for the log-odds, even though the task is classification.
 
-**Q: What shape should binary labels usually have for `BCEWithLogitsLoss`?**
-A: The same shape as the logits, often `(n, 1)` for a batch of `n` examples.
+**Q: What is the most common PyTorch mistake?**
+A: Passing sigmoid probabilities into `BCEWithLogitsLoss`.
 
+**Q: What should the threshold depend on?**
+A: The cost of different mistakes.

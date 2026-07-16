@@ -2,49 +2,88 @@
 
 ## Intuition
 
-**Lasso is linear regression with an L1 penalty.** ISTA trains it by taking a normal gradient step, then applying soft-thresholding to the weights.
+Lasso is **linear regression with an L1 penalty**.
+
+The L1 penalty can push some weights exactly to zero. That means lasso can act like feature selection.
+
+ISTA trains lasso with two moves:
+
+```
+gradient step -> soft-thresholding
+```
+
+The gradient step reduces prediction error.
+
+The soft-thresholding step handles the L1 penalty.
 
 ---
 
-## 1. What Lasso Optimizes
+## 1. The Lasso Objective
 
-Lasso uses the loss:
+The model is still linear regression:
 
-```
-loss = mean((Xw + b - y)^2) + alpha * sum(abs(w))
-```
+$$
+\hat{y} = Xw + b
+$$
 
-The important interview detail:
+The objective is:
 
-- regularize `w`
-- do not regularize `b`
+$$
+\text{loss}
+= \frac{1}{n}\|Xw + b - y\|_2^2
++ \alpha\|w\|_1
+$$
 
-The bias only shifts predictions up or down. Penalizing it usually makes the model worse for no useful feature-selection benefit.
+The L1 norm is:
 
----
+$$
+\|w\|_1 = \sum_{j=1}^{d}|w_j|
+$$
 
-## 2. Why L1 Creates Sparse Weights
-
-L1 regularization adds a constant push toward zero.
-
-That means small weights can become exactly zero.
-
-Intuition:
-
-- Ridge/L2 shrinks weights smoothly.
-- Lasso/L1 can remove features completely.
-
-This is why Lasso is often described as automatic feature selection.
+Regularize `w`, not `b`.
 
 ---
 
-## 3. Soft-Thresholding
+## 2. Why L1 Creates Sparsity
 
-Soft-thresholding is the key operation:
+L1 adds a constant pull toward zero.
+
+Small weights can be pulled all the way to exactly zero.
+
+That is different from ridge:
+
+| Model | Penalty | Typical effect |
+|-------|---------|----------------|
+| Ridge | L2 | shrinks weights smoothly |
+| Lasso | L1 | can set weights to zero |
+
+A zero weight means the model ignores that feature.
+
+---
+
+## 3. Why ISTA?
+
+The L1 penalty is not differentiable at zero.
+
+So plain gradient descent is awkward.
+
+ISTA uses a **proximal step** for the L1 part. In practice, that proximal step is soft-thresholding.
+
+ISTA stands for:
 
 ```
-soft_threshold(x, t) = sign(x) * max(abs(x) - t, 0)
+Iterative Shrinkage-Thresholding Algorithm
 ```
+
+---
+
+## 4. Soft-Thresholding
+
+Soft-thresholding shrinks values toward zero:
+
+$$
+S(x, t) = \operatorname{sign}(x)\max(|x|-t, 0)
+$$
 
 Examples with `t = 0.5`:
 
@@ -54,63 +93,72 @@ Examples with `t = 0.5`:
  0.2 ->  0.0
 ```
 
-It shrinks every value toward zero. Values close enough to zero become exactly zero.
+Values close enough to zero become exactly zero.
 
 ---
 
-## 4. ISTA Training Loop
+## 5. ISTA Update
 
-ISTA means **Iterative Shrinkage-Thresholding Algorithm**.
+First compute the MSE gradient:
 
-Each step does two things:
+$$
+g_w = \frac{2}{n}X^T(Xw + b - y)
+$$
 
-1. Take a gradient step on the MSE part.
-2. Apply soft-thresholding for the L1 part.
+$$
+g_b = \frac{2}{n}\sum_{i=1}^{n}(\hat{y}_i - y_i)
+$$
+
+Then update:
 
 ```
-pred = Xw + b
-grad_w = (2 / n) * X.T @ (pred - y)
-grad_b = (2 / n) * sum(pred - y)
-
-w = soft_threshold(w - lr * grad_w, lr * alpha)
-b = b - lr * grad_b
+w = soft_threshold(w - lr * g_w, lr * alpha)
+b = b - lr * g_b
 ```
 
-Only `w` gets soft-thresholded. The bias gets a normal gradient update.
+Only `w` is soft-thresholded.
+
+The bias gets a normal gradient update.
 
 ---
 
-## 5. NumPy and PyTorch View
+## 6. NumPy and PyTorch Pattern
 
-In NumPy, implement ISTA directly with vectorized arrays.
+Soft-thresholding in NumPy:
 
-In PyTorch, the same idea works with tensors:
-
+```python
+def soft_threshold(x, t):
+    return np.sign(x) * np.maximum(np.abs(x) - t, 0)
 ```
+
+Soft-thresholding in PyTorch:
+
+```python
 torch.sign(x) * torch.clamp(torch.abs(x) - t, min=0)
 ```
 
-For this interview-style exercise, manual tensor updates are clearer than building a full optimizer.
-
----
-
-## 6. Interview Gotchas
-
-- Lasso has no simple closed-form solution like ordinary least squares.
-- L1 is not differentiable at zero, so proximal methods like ISTA are natural.
-- Do not apply L1 to the bias term.
-- Feature scaling matters because L1 penalizes coefficients directly.
-- A larger `alpha` usually creates more zero weights.
+For this topic, manual updates are clearer than using a built-in optimizer.
 
 ---
 
 ## 7. Complexity
 
-For `n` examples and `d` features, one ISTA step costs:
+For `n` samples and `d` features, one ISTA step costs:
 
-```
+$$
 O(nd)
-```
+$$
 
-because the expensive work is `X @ w` and `X.T @ residual`.
+The expensive operations are `X @ w` and `X.T @ error`.
 
+---
+
+## 8. Interview Gotchas
+
+- Lasso changes the loss, not the prediction formula.
+- L1 can create exact zero weights.
+- L1 is not differentiable at zero.
+- ISTA uses soft-thresholding to handle the L1 part.
+- Do not regularize the bias.
+- Feature scaling matters because L1 penalizes coefficient size.
+- Larger `alpha` usually means more zero weights.

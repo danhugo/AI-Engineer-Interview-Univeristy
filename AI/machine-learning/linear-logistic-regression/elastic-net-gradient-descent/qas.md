@@ -2,69 +2,114 @@
 
 ---
 
-## Core Idea
-
-**Q: What is Elastic Net?**
-A: Linear regression with both L1 and L2 regularization.
-
-**Q: What is the objective?**
-A: `MSE + l1 * sum(abs(w)) + l2 * sum(w^2)`.
-
-**Q: Do we regularize the bias?**
-A: No. Only the feature weights are regularized.
-
----
-
 ## Intuition
 
-**Q: What does the L1 part do?**
-A: It can push some weights exactly to zero.
+**Q: What is Elastic Net?**
+A: Linear regression with both L1 and L2 penalties.
 
-**Q: What does the L2 part do?**
-A: It discourages large weights smoothly.
+**Q: What does it combine?**
+A: Lasso-style sparsity and ridge-style stability.
 
-**Q: Why use Elastic Net instead of only Lasso?**
-A: Elastic Net is often more stable when features are correlated.
+**Q: Does Elastic Net change the prediction formula?**
+A: No. Prediction is still `Xw + b`.
 
 ---
 
-## Gradients
+## 1. The Objective
+
+**Q: What are the three parts of the Elastic Net loss?**
+A: MSE, an L1 penalty, and an L2 penalty.
+
+**Q: What does `lambda_1` control?**
+A: The L1 penalty strength.
+
+**Q: What does `lambda_2` control?**
+A: The L2 penalty strength.
+
+---
+
+## 2. Why Combine L1 and L2?
+
+**Q: What does L1 add?**
+A: Feature selection through exact zero weights.
+
+**Q: What does L2 add?**
+A: Smooth shrinkage and stability.
+
+**Q: Why is Elastic Net useful with correlated features?**
+A: It can be more stable than pure lasso, which may choose only one feature from a correlated group.
+
+---
+
+## 3. Relation to Ridge and Lasso
+
+**Q: When does Elastic Net become lasso?**
+A: When `lambda_1 > 0` and `lambda_2 = 0`.
+
+**Q: When does Elastic Net become ridge?**
+A: When `lambda_1 = 0` and `lambda_2 > 0`.
+
+**Q: When is it true Elastic Net?**
+A: When both penalties are positive.
+
+---
+
+## 4. Gradients and Subgradients
 
 **Q: What is the MSE gradient for weights?**
-A: `(2 / n) * X.T @ (pred - y)`.
+A: `(2 / n) * X.T @ error`.
 
-**Q: What is the MSE gradient for bias?**
-A: `(2 / n) * sum(pred - y)`.
+**Q: What is the L2 gradient?**
+A: `2 * lambda_2 * w`.
 
-**Q: What is the L2 gradient if the penalty is `l2 * sum(w^2)`?**
-A: `2 * l2 * w`.
-
-**Q: What do we use for the L1 subgradient in simple code?**
-A: `l1 * sign(w)`.
+**Q: What does the L1 term use?**
+A: A subgradient, usually `lambda_1 * sign(w)` in simple code.
 
 ---
 
-## Training
+## 5. Gradient Descent Update
 
-**Q: What is the full weight gradient?**
-A: `mse_grad_w + l1 * sign(w) + 2 * l2 * w`.
+**Q: What terms are in the weight gradient?**
+A: MSE gradient, L1 subgradient, and L2 gradient.
 
-**Q: What is the full bias gradient?**
-A: Only the MSE bias gradient, because the bias is not regularized.
+**Q: What terms are in the bias gradient?**
+A: Only the MSE bias gradient.
 
-**Q: What can happen if the learning rate is too large?**
-A: The loss can bounce around or diverge.
+**Q: Why is the bias not regularized?**
+A: It is the baseline prediction, not a feature strength.
 
 ---
 
-## Gotchas
+## 6. Subgradient vs Proximal Update
 
-**Q: Why should features be scaled before Elastic Net?**
-A: Regularization penalizes coefficient size, so unscaled features can be penalized unfairly.
+**Q: Why is subgradient descent simple?**
+A: It lets you write one gradient-like update for all terms.
 
-**Q: Does basic subgradient descent create exact zeros as reliably as ISTA?**
-A: No. Proximal methods are usually better for exact sparsity, but subgradient descent is simple and interview-friendly.
+**Q: What is the downside?**
+A: It may not create exact zeros as cleanly as proximal methods.
+
+**Q: What handles L1 penalties better?**
+A: Proximal methods such as soft-thresholding.
+
+---
+
+## 7. Complexity
 
 **Q: What is the cost of one gradient step?**
-A: O(nd), where `n` is the number of examples and `d` is the number of features.
+A: `O(nd)`.
 
+**Q: What operations dominate the cost?**
+A: `X @ w` and `X.T @ error`.
+
+---
+
+## 8. Interview Gotchas
+
+**Q: Why does feature scaling matter?**
+A: Regularization penalizes coefficient size.
+
+**Q: What happens if the learning rate is too large?**
+A: The loss can diverge.
+
+**Q: What is the core Elastic Net summary?**
+A: MSE plus L1 and L2 penalties on the weights.
