@@ -29,24 +29,24 @@ Each one teaches a concept you must know.
 - [ ] [Triplet Loss](loss-function/triplet-loss/note.md)
 
 ## 3. Optimization & Training
-- [ ] Gradient Descent Variants (Batch / SGD / Mini-batch)
-- [ ] Adam / AdamW Optimizer Step
-- [ ] Gradient Clipping
-- [ ] Weight Decay vs L2 Regularization
-- [ ] Dropout (forward + inference mode)
-- [ ] Batch Normalization Forward Pass
-- [ ] Feature Scaling
-- [ ] Early Stopping Based on Validation Loss
-- [ ] Mixed Precision Training
-- [ ] Gradient Checkpointing
+- [ ] [Gradient Descent Variants (Batch / SGD / Mini-batch)](optimization-training/gradient-descent-variants/note.md)
+- [ ] [Adam / AdamW Optimizer Step](optimization-training/adam-adamw-optimizer-step/note.md)
+- [ ] [Gradient Clipping](optimization-training/gradient-clipping/note.md)
+- [ ] [Weight Decay vs L2 Regularization](optimization-training/weight-decay-vs-l2-regularization/note.md)
+- [ ] [Dropout (forward + inference mode)](optimization-training/dropout/note.md)
+- [ ] [Batch Normalization Forward Pass](optimization-training/batch-normalization-forward-pass/note.md)
+- [ ] [Feature Scaling](optimization-training/feature-scaling/note.md)
+- [ ] [Early Stopping Based on Validation Loss](optimization-training/early-stopping-validation-loss/note.md)
+- [ ] [Mixed Precision Training](optimization-training/mixed-precision-training/note.md)
+- [ ] [Gradient Checkpointing](optimization-training/gradient-checkpointing/note.md)
 
 ## 4. Learning Rate Schedulers
-- [ ] StepLR
-- [ ] ExponentialLR
-- [ ] CosineAnnealingLR
-- [ ] Cosine Annealing with Warm Restarts
-- [ ] Linear Warmup Schedule
-- [ ] Warmup + Cosine Decay
+- [ ] [StepLR](learning-rate-schedulers/step-lr/note.md)
+- [ ] [ExponentialLR](learning-rate-schedulers/exponential-lr/note.md)
+- [ ] [CosineAnnealingLR](learning-rate-schedulers/cosine-annealing-lr/note.md)
+- [ ] [Cosine Annealing with Warm Restarts](learning-rate-schedulers/cosine-annealing-warm-restarts/note.md)
+- [ ] [Linear Warmup Schedule](learning-rate-schedulers/linear-warmup-schedule/note.md)
+- [ ] [Warmup + Cosine Decay](learning-rate-schedulers/warmup-cosine-decay/note.md)
 
 ## 5. Model Validation & Selection
 - [ ] K-Fold Cross-Validation
@@ -134,41 +134,41 @@ Each one teaches a concept you must know.
 - [ ] Kernel PCA
 
 ## 15. NLP / LLM
-- [ ] Layer Normalization for Sequence Data
-- [ ] Sparse Window Attention
-- [ ] GPT FeedForward Block (Linear-GELU-Linear)
-- [ ] Temperature Sampling
-- [ ] Beam Search Decoding
-- [ ] ROUGE Score
-- [ ] Extend BPE Tokenizer
-- [ ] Chat Template Encoding
-- [ ] Count Trainable Parameters (Weight Tying)
-- [ ] Model Memory Footprint
-- [ ] Shortcut Connection Gradient Effect
-- [ ] Multi-Head Attention from Scratch
-- [ ] Rotary Positional Encoding (RoPE)
-- [ ] Grouped Query Attention (GQA)
-- [ ] RMSNorm
-- [ ] LoRA / QLoRA Parameter Count
-- [ ] Flash Attention (concept + memory complexity)
-- [ ] BLEU Score
-- [ ] Perplexity Calculation
+- [ ] [Layer Normalization for Sequence Data](nlp-llm/layer-normalization-sequence-data/note.md)
+- [ ] [Sparse Window Attention](nlp-llm/sparse-window-attention/note.md)
+- [ ] [GPT FeedForward Block (Linear-GELU-Linear)](nlp-llm/gpt-feedforward-block/note.md)
+- [ ] [Temperature Sampling](nlp-llm/temperature-sampling/note.md)
+- [ ] [Beam Search Decoding](nlp-llm/beam-search-decoding/note.md)
+- [ ] [ROUGE Score](nlp-llm/rouge-score/note.md)
+- [ ] [Extend BPE Tokenizer](nlp-llm/extend-bpe-tokenizer/note.md)
+- [ ] [Chat Template Encoding](nlp-llm/chat-template-encoding/note.md)
+- [ ] [Count Trainable Parameters (Weight Tying)](nlp-llm/count-trainable-parameters-weight-tying/note.md)
+- [ ] [Model Memory Footprint](nlp-llm/model-memory-footprint/note.md)
+- [ ] [Shortcut Connection Gradient Effect](nlp-llm/shortcut-connection-gradient-effect/note.md)
+- [ ] [Multi-Head Attention from Scratch](nlp-llm/multi-head-attention-from-scratch/note.md)
+- [ ] [Rotary Positional Encoding (RoPE)](nlp-llm/rotary-positional-encoding-rope/note.md)
+- [ ] [Grouped Query Attention (GQA)](nlp-llm/grouped-query-attention-gqa/note.md)
+- [ ] [RMSNorm](nlp-llm/rmsnorm/note.md)
+- [ ] [LoRA / QLoRA Parameter Count](nlp-llm/lora-qlora-parameter-count/note.md)
+- [ ] [Flash Attention (concept + memory complexity)](nlp-llm/flash-attention-concept-memory-complexity/note.md)
+- [ ] [BLEU Score](nlp-llm/bleu-score/note.md)
+- [ ] [Perplexity Calculation](nlp-llm/perplexity-calculation/note.md)
 
 ## 16. LLM Serving & Inference
-- [ ] Tokens-per-Second Throughput
-- [ ] Compute TTFT, ITL, TPS from Token Timestamp Stream
-- [ ] End-to-End Latency Decomposition
-- [ ] Prefix Cache Hit Rate
-- [ ] KV Cache Tiered Offloading
-- [ ] N-gram Speculation Dictionary Construction
-- [ ] Speculative Decoding Acceptance Rate vs Temperature
-- [ ] Expert Parallelism Token Routing and Communication Cost
-- [ ] Disaggregated Prefill-Decode Serving
-- [ ] Cold Start Latency Budget Breakdown
-- [ ] Break-Even Pay-Per-Token API vs Dedicated GPU
-- [ ] Continuous Batching Throughput
-- [ ] PagedAttention KV Cache Utilization
-- [ ] LoRA Adapter Hot-Swap Overhead
+- [ ] [Tokens-per-Second Throughput](llm-serving-inference/tokens-per-second-throughput/note.md)
+- [ ] [Compute TTFT, ITL, TPS from Token Timestamp Stream](llm-serving-inference/compute-ttft-itl-tps-token-timestamps/note.md)
+- [ ] [End-to-End Latency Decomposition](llm-serving-inference/end-to-end-latency-decomposition/note.md)
+- [ ] [Prefix Cache Hit Rate](llm-serving-inference/prefix-cache-hit-rate/note.md)
+- [ ] [KV Cache Tiered Offloading](llm-serving-inference/kv-cache-tiered-offloading/note.md)
+- [ ] [N-gram Speculation Dictionary Construction](llm-serving-inference/ngram-speculation-dictionary-construction/note.md)
+- [ ] [Speculative Decoding Acceptance Rate vs Temperature](llm-serving-inference/speculative-decoding-acceptance-rate-vs-temperature/note.md)
+- [ ] [Expert Parallelism Token Routing and Communication Cost](llm-serving-inference/expert-parallelism-token-routing-communication-cost/note.md)
+- [ ] [Disaggregated Prefill-Decode Serving](llm-serving-inference/disaggregated-prefill-decode-serving/note.md)
+- [ ] [Cold Start Latency Budget Breakdown](llm-serving-inference/cold-start-latency-budget-breakdown/note.md)
+- [ ] [Break-Even Pay-Per-Token API vs Dedicated GPU](llm-serving-inference/break-even-pay-per-token-api-vs-dedicated-gpu/note.md)
+- [ ] [Continuous Batching Throughput](llm-serving-inference/continuous-batching-throughput/note.md)
+- [ ] [PagedAttention KV Cache Utilization](llm-serving-inference/pagedattention-kv-cache-utilization/note.md)
+- [ ] [LoRA Adapter Hot-Swap Overhead](llm-serving-inference/lora-adapter-hot-swap-overhead/note.md)
 
 ## 17. Scaling Laws & RLHF
 - [ ] Power-Law Scaling Law
