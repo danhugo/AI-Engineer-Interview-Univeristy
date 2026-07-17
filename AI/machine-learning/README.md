@@ -85,18 +85,18 @@ Each one teaches a concept you must know.
 - [ ] MAPE (Mean Absolute Percentage Error)
 
 ## 9. Decision Trees & Ensembles
-- [ ] Gini Impurity
-- [ ] Entropy-based Split Selection
-- [ ] Decision Tree (Classification)
-- [ ] Decision Tree (Regression)
-- [ ] Random Forest Fit from Scratch
-- [ ] Random Forest Feature Importance
-- [ ] Out-of-Bag Score
-- [ ] Bagging Classifier from Scratch
-- [ ] AdaBoost Fit Method
-- [ ] Gradient Boosting Regressor Step
-- [ ] XGBoost Objective Function
-- [ ] LightGBM Objective Function
+- [ ] [Gini Impurity](decision-trees-ensembles/gini-impurity/note.md)
+- [ ] [Entropy-based Split Selection](decision-trees-ensembles/entropy-based-split-selection/note.md)
+- [ ] [Decision Tree Classification](decision-trees-ensembles/decision-tree-classification/note.md)
+- [ ] [Decision Tree Regression](decision-trees-ensembles/decision-tree-regression/note.md)
+- [ ] [Random Forest Fit from Scratch](decision-trees-ensembles/random-forest-fit-from-scratch/note.md)
+- [ ] [Random Forest Feature Importance](decision-trees-ensembles/random-forest-feature-importance/note.md)
+- [ ] [Out-of-Bag Score](decision-trees-ensembles/out-of-bag-score/note.md)
+- [ ] [Bagging Classifier from Scratch](decision-trees-ensembles/bagging-classifier-from-scratch/note.md)
+- [ ] [AdaBoost Fit Method](decision-trees-ensembles/adaboost-fit-method/note.md)
+- [ ] [Gradient Boosting Regressor Step](decision-trees-ensembles/gradient-boosting-regressor-step/note.md)
+- [ ] [XGBoost Objective Function](decision-trees-ensembles/xgboost-objective-function/note.md)
+- [ ] [LightGBM Objective Function](decision-trees-ensembles/lightgbm-objective-function/note.md)
 
 ## 10. Support Vector Machines
 - [ ] Linear Kernel
