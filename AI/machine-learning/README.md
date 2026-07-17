@@ -18,15 +18,15 @@ Each one teaches a concept you must know.
 - [ ] [Train Softmax Regression with Gradient Descent](linear-logistic-regression/softmax-regression-gradient-descent/note.md)
 
 ## 2. Loss Functions
-- [ ] MSE Loss
-- [ ] Cross-Entropy Loss
-- [ ] Hinge Loss (SVM)
-- [ ] Huber Loss
-- [ ] Focal Loss (imbalanced classification)
-- [ ] Label Smoothing for Multi-Class Cross-Entropy
-- [ ] KL Divergence
-- [ ] Contrastive Loss (SimCLR / metric learning)
-- [ ] Triplet Loss
+- [ ] [MSE Loss](loss-function/mse-loss/note.md)
+- [ ] [Cross-Entropy Loss](loss-function/cross-entropy-loss/note.md)
+- [ ] [Hinge Loss (SVM)](loss-function/hinge-loss/note.md)
+- [ ] [Huber Loss](loss-function/huber-loss/note.md)
+- [ ] [Focal Loss (imbalanced classification)](loss-function/focal-loss/note.md)
+- [ ] [Label Smoothing for Multi-Class Cross-Entropy](loss-function/label-smoothing-cross-entropy/note.md)
+- [ ] [KL Divergence](loss-function/kl-divergence/note.md)
+- [ ] [Contrastive Loss (SimCLR / metric learning)](loss-function/contrastive-loss/note.md)
+- [ ] [Triplet Loss](loss-function/triplet-loss/note.md)
 
 ## 3. Optimization & Training
 - [ ] Gradient Descent Variants (Batch / SGD / Mini-batch)
