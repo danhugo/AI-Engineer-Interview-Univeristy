@@ -116,14 +116,14 @@ Each one teaches a concept you must know.
 - [ ] K-Nearest Neighbors
 
 ## 13. Clustering
-- [ ] K-Means
-- [ ] K-Means++ Initialization
-- [ ] DBSCAN
-- [ ] BIRCH Clustering
-- [ ] Hierarchical (Agglomerative) Clustering
-- [ ] Gaussian Mixture Model with EM
-- [ ] Silhouette Score
-- [ ] Elbow Method for K Selection
+- [ ] [K-Means](clustering/k-means/note.md)
+- [ ] [K-Means++ Initialization](clustering/k-means-plus-plus-initialization/note.md)
+- [ ] [DBSCAN](clustering/dbscan/note.md)
+- [ ] [BIRCH Clustering](clustering/birch-clustering/note.md)
+- [ ] [Hierarchical Agglomerative Clustering](clustering/hierarchical-agglomerative-clustering/note.md)
+- [ ] [Gaussian Mixture Model with EM](clustering/gaussian-mixture-model-em/note.md)
+- [ ] [Silhouette Score](clustering/silhouette-score/note.md)
+- [ ] [Elbow Method for K Selection](clustering/elbow-method-k-selection/note.md)
 
 ## 14. Dimensionality Reduction
 - [ ] Principal Component Analysis (PCA)
