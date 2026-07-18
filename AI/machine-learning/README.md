@@ -49,21 +49,21 @@ Each one teaches a concept you must know.
 - [ ] [Warmup + Cosine Decay](learning-rate-schedulers/warmup-cosine-decay/note.md)
 
 ## 5. Model Validation & Selection
-- [ ] K-Fold Cross-Validation
-- [ ] Stratified Train-Test Split
-- [ ] Bias-Variance Decomposition from Bootstrap
-- [ ] Grid Search
-- [ ] Random Search vs Grid Search
-- [ ] Bayesian Hyperparameter Optimization
-- [ ] Learning Curve Generator for Bias-Variance Diagnosis
+- [ ] [K-Fold Cross-Validation](model-validation-selection/k-fold-cross-validation/note.md)
+- [ ] [Stratified Train-Test Split](model-validation-selection/stratified-train-test-split/note.md)
+- [ ] [Bias-Variance Decomposition from Bootstrap](model-validation-selection/bias-variance-decomposition-bootstrap/note.md)
+- [ ] [Grid Search](model-validation-selection/grid-search/note.md)
+- [ ] [Random Search vs Grid Search](model-validation-selection/random-search-vs-grid-search/note.md)
+- [ ] [Bayesian Hyperparameter Optimization](model-validation-selection/bayesian-hyperparameter-optimization/note.md)
+- [ ] [Learning Curve Generator for Bias-Variance Diagnosis](model-validation-selection/learning-curve-bias-variance-diagnosis/note.md)
 
 ## 6. Preprocessing
-- [ ] One-Hot Encoding
-- [ ] Label Encoding
-- [ ] StandardScaler Fit and Transform
-- [ ] MinMaxScaler
-- [ ] Missing Value Imputation (mean / median / mode)
-- [ ] Train/Val/Test Split with No Leakage
+- [ ] [One-Hot Encoding](preprocessing/one-hot-encoding/note.md)
+- [ ] [Label Encoding](preprocessing/label-encoding/note.md)
+- [ ] [StandardScaler Fit and Transform](preprocessing/standardscaler-fit-transform/note.md)
+- [ ] [MinMaxScaler](preprocessing/minmaxscaler/note.md)
+- [ ] [Missing Value Imputation](preprocessing/missing-value-imputation/note.md)
+- [ ] [Train/Val/Test Split with No Leakage](preprocessing/train-val-test-split-no-leakage/note.md)
 
 ## 7. Classification Metrics
 - [ ] Accuracy Score
