@@ -99,13 +99,13 @@ Each one teaches a concept you must know.
 - [ ] [LightGBM Objective Function](decision-trees-ensembles/lightgbm-objective-function/note.md)
 
 ## 10. Support Vector Machines
-- [ ] Linear Kernel
-- [ ] RBF (Gaussian) Kernel
-- [ ] Polynomial Kernel
-- [ ] Sigmoid Kernel
-- [ ] SVM Margin Width
-- [ ] Hinge Loss for SVM
-- [ ] Pegasos Kernel SVM
+- [ ] [Linear Kernel](support-vector-machines/linear-kernel/note.md)
+- [ ] [RBF Gaussian Kernel](support-vector-machines/rbf-gaussian-kernel/note.md)
+- [ ] [Polynomial Kernel](support-vector-machines/polynomial-kernel/note.md)
+- [ ] [Sigmoid Kernel](support-vector-machines/sigmoid-kernel/note.md)
+- [ ] [SVM Margin Width](support-vector-machines/svm-margin-width/note.md)
+- [ ] [Hinge Loss for SVM](support-vector-machines/hinge-loss-for-svm/note.md)
+- [ ] [Pegasos Kernel SVM](support-vector-machines/pegasos-kernel-svm/note.md)
 
 ## 11. Naive Bayes
 - [ ] Gaussian Naive Bayes
