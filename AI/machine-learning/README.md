@@ -171,12 +171,12 @@ Each one teaches a concept you must know.
 - [ ] [LoRA Adapter Hot-Swap Overhead](llm-serving-inference/lora-adapter-hot-swap-overhead/note.md)
 
 ## 17. Scaling Laws & RLHF
-- [ ] Power-Law Scaling Law
-- [ ] Compute-Optimal Model Size (IsoFLOP)
-- [ ] Sigmoidal Accuracy-to-Log-Likelihood Scaling Law Fit
-- [ ] KL-Penalized Reward Shaping (RLHF)
-- [ ] RLAIF Reward Model
-- [ ] Combined RM and LLM Quality Filter
-- [ ] DPO (Direct Preference Optimization) Loss
-- [ ] PPO Clipped Objective
-- [ ] Reward Model Calibration
+- [ ] [Power-Law Scaling Law](scaling-laws-rlhf/power-law-scaling-law/note.md)
+- [ ] [Compute-Optimal Model Size IsoFLOP](scaling-laws-rlhf/compute-optimal-model-size-isoflop/note.md)
+- [ ] [Sigmoidal Accuracy-to-Log-Likelihood Scaling Law Fit](scaling-laws-rlhf/sigmoidal-accuracy-to-log-likelihood-scaling-law-fit/note.md)
+- [ ] [KL-Penalized Reward Shaping RLHF](scaling-laws-rlhf/kl-penalized-reward-shaping-rlhf/note.md)
+- [ ] [RLAIF Reward Model](scaling-laws-rlhf/rlaif-reward-model/note.md)
+- [ ] [Combined RM and LLM Quality Filter](scaling-laws-rlhf/combined-rm-llm-quality-filter/note.md)
+- [ ] [DPO Direct Preference Optimization Loss](scaling-laws-rlhf/dpo-direct-preference-optimization-loss/note.md)
+- [ ] [PPO Clipped Objective](scaling-laws-rlhf/ppo-clipped-objective/note.md)
+- [ ] [Reward Model Calibration](scaling-laws-rlhf/reward-model-calibration/note.md)
