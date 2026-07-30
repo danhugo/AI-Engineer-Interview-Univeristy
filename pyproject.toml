@@ -12,7 +12,7 @@ dev = [
     "pytest",
 ]
 
-# Discover tests next to source: test_*.py in this project folder.
+# Discover transformer tests from the repo root.
 [tool.pytest.ini_options]
-pythonpath = ["."]
-testpaths = ["."]
+pythonpath = ["AI/projects/transformer-from-scratch"]
+testpaths = ["AI/projects/transformer-from-scratch"]
