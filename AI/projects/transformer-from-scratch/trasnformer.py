@@ -93,12 +93,61 @@ class MultiHeadAttention(nn.Module):
 
     **decoder masked self-attention**: each target token looks only at previous target tokens
 
-    """
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    Args:
+        d_model (int): model dimension.
+        num_heads (int): number of attention heads. d_model = head_dim * num_heads
+        dropout (float): a dropout layer on attention weights. Default: 0.0.
+        bias: add bias as parameter. Default: True.
 
-    def forward():
-        pass
+
+    """
+    def __init__(
+            self,
+            d_model: int,
+            num_heads: int,
+            dropout: float = 0.0,
+            bias: bool = True,
+        ) -> None:
+        super().__init__()
+
+        if d_model % num_heads != 0:
+            raise ValueError("d_model must be divisible by num_heads")
+
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.head_dim = d_model // num_heads
+
+        self.q_proj = nn.Linear(d_model, d_model, bias=bias)
+        self.k_proj = nn.Linear(d_model, d_model, bias=bias)
+        self.v_proj = nn.Linear(d_model, d_model, bias=bias)
+        self.out_proj = nn.Linear(d_model, d_model, bias=bias)
+        self.attention_dropout = nn.Dropout(dropout)
+
+    def forward(
+            self,
+            query: torch.Tensor,
+            key: torch.Tensor | None = None,
+            value: torch.Tensor | None = None,
+            attention_mask: torch.Tensor | None = None,
+        ) -> torch.Tensor:
+        """
+        Args:
+            query: (batch, query_len, d_model)
+            key: (batch, key_len, d_model). Defaults to query for self-attention.
+            value: (batch, key_len, d_model). Defaults to key.
+            attention_mask: mask broadcastable to (batch, num_heads, query_len, key_len).
+        """
+        key = query if key is None else key
+        value = key if value is None else value
+
+        # TODO: Project query, key, and value with q_proj, k_proj, and v_proj.
+        # TODO: Split dimensions into (batch, num_heads, seq_len, head_dim).
+        # TODO: Compute QK^T / sqrt(head_dim).
+        # TODO: Apply attention_mask before softmax.
+        # TODO: Apply softmax and attention_dropout, then multiply by V.
+        # TODO: Merge heads back to (batch, query_len, d_model).
+        # TODO: Return the result of out_proj.
+        raise NotImplementedError("Complete the multi-head attention forward pass")
 
 
 class PositionalWiseFeedForward(nn.Module):
