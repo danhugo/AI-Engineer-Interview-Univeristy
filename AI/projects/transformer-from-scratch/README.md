@@ -112,7 +112,7 @@ $$
 X_{\text{input}} = X_{\text{token}} + PE
 $$
 
-## Why Use Different Frequencies?
+### Why Use Different Frequencies?
 
 The sinusoidal formula can also be written as:
 
@@ -137,7 +137,7 @@ For intuition, one position step is one token step. We imply $v = 1$.
 
 So the model gets both local and long-range position signals.
 
-## Why $10000$?
+### Why $10000$?
 
 The value $10000$ controls the wavelength range.
 
@@ -180,7 +180,7 @@ patterns inside the context window.
 
 Transformer has d_model = 1024, so this number is large enough to model position of tokens.
 
-## RoPE
+### RoPE
 
 Video: https://www.youtube.com/watch?v=o29P0Kpobz0
 
@@ -188,7 +188,7 @@ Video: https://www.youtube.com/watch?v=o29P0Kpobz0
 
 RoPE means Rotary Positional Embedding.
 
-### Why RoPE?
+#### Why RoPE?
 
 Absolute PE tells the model **where** each token is, but it does not represent
 the distance $j-i$ directly. Learned absolute PE stores one trainable vector
@@ -219,7 +219,7 @@ After training, the bias matrix $B$ is **fixed for the same relative
 positions**. Adding it inside attention requires extra work or explicit support
 from the fused attention kernel.
 
-### Core intuition
+#### Core intuition
 
 RoPE groups the dimensions of each $Q$ and $K$ vector into 2D pairs, such as
 $[x_{2i},x_{2i+1}]$. At position $p$, it rotates each dimension pair by:
@@ -231,7 +231,7 @@ $$
 $w_i$ means how many radians the wave moves per token step. Each rotated vector
 therefore **depends on its absolute position**.
 
-### Why rotation works
+#### Why rotation works
 
 For tokens at positions $m$ and $n$, the angle difference is:
 
@@ -279,14 +279,14 @@ the usual $QK^\top$ computation, so **RoPE does not require an extra bias matrix
 inside the attention kernel**. RoPE is applied to $Q$ and $K$, not $V$, because
 $QK^\top$ computes attention scores.
 
-### Distance effect
+#### Distance effect
 
 Nearby positions have small rotation differences. As distance grows, the
 different 2D pairs tend to become less aligned, so positional correlation often
 weakens. **This is not a strict rule:** content can still make distant tokens
 attend strongly.
 
-### Why RoPE fits self-attention
+#### Why RoPE fits self-attention
 
 In self-attention, $Q$ and $K$ come from the same sequence, so their position
 difference $j-i$ is meaningful. RoPE therefore works naturally in both encoder
@@ -296,3 +296,5 @@ For autoregressive decoding, RoPE also works efficiently with the KV cache:
 each key is **rotated once before being cached**, while each new query is rotated
 at its current position. Cross-attention needs more care because its queries and
 keys come from different sequences, so $j-i$ may not be meaningful.
+
+## Multihead Attention Block
