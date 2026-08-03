@@ -121,26 +121,46 @@ class MultiHeadAttention(nn.Module):
         self.k_proj = nn.Linear(d_model, d_model, bias=bias)
         self.v_proj = nn.Linear(d_model, d_model, bias=bias)
         self.out_proj = nn.Linear(d_model, d_model, bias=bias)
-        self.attention_dropout = nn.Dropout(dropout)
+        self.dropout = nn.Dropout(dropout)
+
+    def split_head(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Input: [batch, seq_len, d_model]
+        Output: [batch, num_heads, seq_len, head_dim]
+        """
+        batch_size, seq_len, _ = x.shape
+        x = x.reshape(batch_size, seq_len, self.num_heads, self.head_dim)
+        return x.transpose(1,2)
+    
+    def merge_head(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Input: [batch, num_heads, seq_len, head_dim]
+        Output: [batch, seq_len, d_model]
+        """
+        batch_size, _, seq_len, _ = x.shape
+        x = x.transpose(1,2).contiguous()
+        return x.reshape(batch_size, seq_len, self.d_model)
 
     def forward(
-            self,
-            query: torch.Tensor,
-            key: torch.Tensor | None = None,
-            value: torch.Tensor | None = None,
-            attention_mask: torch.Tensor | None = None,
-        ) -> torch.Tensor:
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor | None = None,
+        value: torch.Tensor | None = None,
+        attn_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         """
         Args:
             query: (batch, query_len, d_model)
             key: (batch, key_len, d_model). Defaults to query for self-attention.
             value: (batch, key_len, d_model). Defaults to key.
-            attention_mask: mask broadcastable to (batch, num_heads, query_len, key_len).
+            attn_mask: mask broadcastable to (batch, num_heads, query_len, key_len).
         """
         key = query if key is None else key
         value = key if value is None else value
-
-        # TODO: Project query, key, and value with q_proj, k_proj, and v_proj.
+        
+        q = self.q_proj(query)
+        k = self.k_proj(key)
+        v = self.v_proj(value)
         # TODO: Split dimensions into (batch, num_heads, seq_len, head_dim).
         # TODO: Compute QK^T / sqrt(head_dim).
         # TODO: Apply attention_mask before softmax.
