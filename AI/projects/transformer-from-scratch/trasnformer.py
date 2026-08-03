@@ -19,7 +19,7 @@ class Embedding(nn.Module):
 
             embedding of padding_idx does not contribute to gradient and is not updated during training.
             By default it is all zeros.
-    
+
     Attributes:
         weight (torch.Tensor): learnable weights of the module of shape (num_embeddings, embedding_dim)
             initialized from normal distribution nn.init.normal_()
@@ -41,13 +41,13 @@ class Embedding(nn.Module):
             with torch.no_grad():
                 self.weight[self.padding_idx].fill_(0)
 
-            # clean out gradients at padding_idx    
+            # clean out gradients at padding_idx
             self.weight.register_hook(self._zero_padding_grad)
 
     def _zero_padding_grad(self, grad: torch.Tensor) -> torch.Tensor:
-        # PyTorch recommends not modifying the incoming gradient in-place 
+        # PyTorch recommends not modifying the incoming gradient in-place
         # because the grad passed to your hook may be shared or used by other hooks
-        grad = grad.clone() 
+        grad = grad.clone()
         grad[self.padding_idx] = 0
         return grad
 
@@ -59,10 +59,10 @@ class PositionalEncoding(nn.Module):
     """
     Add positional information, because attention does not know token order.
 
-    Without this, the model sees: 
-    
-    *I go to school, school to go I* 
-    
+    Without this, the model sees:
+
+    *I go to school, school to go I*
+
     as the same set of tokens.
     """
     def __init__(self, d_model: int, max_seq_len: int, dropout: float = 0.1):
@@ -73,7 +73,7 @@ class PositionalEncoding(nn.Module):
         div_term = torch.exp(
             torch.arange(0, d_model, 2, dtype=torch.float)
             * (-math.log(10000.0) / d_model)    # use math.log to avoid unneccesary torch tensor overhead
-        ) 
+        )
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
         pe = pe.unsqueeze(0)   # (1, max_seq_len, d_model) -> broadcasts over batch
@@ -97,8 +97,7 @@ class MultiHeadAttention(nn.Module):
         d_model (int): model dimension.
         num_heads (int): number of attention heads. d_model = head_dim * num_heads
         dropout (float): a dropout layer on attention weights. Default: 0.0.
-        bias: add bias as parameter. Default: True.
-
+        bias: add bias as parameter. Default: False.
 
     """
     def __init__(
@@ -106,7 +105,7 @@ class MultiHeadAttention(nn.Module):
             d_model: int,
             num_heads: int,
             dropout: float = 0.0,
-            bias: bool = True,
+            bias: bool = False,
         ) -> None:
         super().__init__()
 
@@ -130,15 +129,15 @@ class MultiHeadAttention(nn.Module):
         """
         batch_size, seq_len, _ = x.shape
         x = x.reshape(batch_size, seq_len, self.num_heads, self.head_dim)
-        return x.transpose(1,2)
-    
+        return x.transpose(1, 2)
+
     def merge_head(self, x: torch.Tensor) -> torch.Tensor:
         """
         Input: [batch, num_heads, seq_len, head_dim]
         Output: [batch, seq_len, d_model]
         """
         batch_size, _, seq_len, _ = x.shape
-        x = x.transpose(1,2).contiguous()
+        x = x.transpose(1, 2).contiguous()
         return x.reshape(batch_size, seq_len, self.d_model)
 
     def forward(
@@ -157,44 +156,137 @@ class MultiHeadAttention(nn.Module):
         """
         key = query if key is None else key
         value = key if value is None else value
-        
+
         q = self.q_proj(query)
         k = self.k_proj(key)
         v = self.v_proj(value)
-        # TODO: Split dimensions into (batch, num_heads, seq_len, head_dim).
-        # TODO: Compute QK^T / sqrt(head_dim).
-        # TODO: Apply attention_mask before softmax.
-        # TODO: Apply softmax and attention_dropout, then multiply by V.
-        # TODO: Merge heads back to (batch, query_len, d_model).
-        # TODO: Return the result of out_proj.
-        raise NotImplementedError("Complete the multi-head attention forward pass")
+
+        q = self.split_head(q)
+        k = self.split_head(k)
+        v = self.split_head(v)
+
+        attn_scores = torch.matmul(q, k.transpose(-2, -1))
+        attn_scores = attn_scores / math.sqrt(self.head_dim)
+
+        # Apply attention_mask before softmax.
+        # attn_mask = [[1, 0, 0], [1, 1, 0], [1, 1, 1]]
+        if attn_mask is not None:
+            attn_scores = attn_scores.masked_fill(~attn_mask, float("-inf"))
+
+        # attn_scores has shape (batch, num_heads, num_queries, num_keys)
+        # applying softmax upon last dimension
+        # represent probabilities of each query token over all key tokens
+
+        attn_weights = torch.softmax(attn_scores, dim=-1)
+
+        # intuition for attention dropout:
+        attn_weights = self.dropout(attn_weights)
+
+        context = torch.matmul(attn_weights, v)
+        context = self.merge_head(context)
+        output = self.out_proj(context)
+        return output
 
 
-class PositionalWiseFeedForward(nn.Module):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-    
-    def forward():
-        pass
+class FeedForward(nn.Module):
+    def __init__(
+        self,
+        d_model: int,
+        d_ff: int,
+        dropout: float = 0.1
+    ):
+        super().__init__()
+        self.ff = nn.Sequential(
+            nn.Linear(d_model, d_ff),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(d_ff, d_model)
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.ff(x)
 
 
 class EncoderBlock(nn.Module):
     """Convert source tokens to context-aware representations (Contextualize)."""
-    def __init__():
-        pass
+    def __init__(
+        self,
+        d_model: int,
+        d_ff: int,
+        num_heads: int,
+        dropout: float = 0.1,
+        bias: bool = False,
+    ):
+        super().__init__()
 
-    def forward():
-        pass
+        self.self_attention = MultiHeadAttention(d_model, num_heads, dropout, bias)
+        self.feed_forward = FeedForward(d_model, d_ff, dropout)
+
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.dropout1 = nn.Dropout(dropout)
+        self.dropout2 = nn.Dropout(dropout)
+
+    def forward(self, x: torch.Tensor, attn_mask: torch.Tensor | None = None) -> torch.Tensor:
+        attn_output = self.self_attention(query=x, attn_mask=attn_mask)
+        x = self.norm1(x + self.dropout1(attn_output))
+        ff_output = self.feed_forward(x)
+        x = self.norm2(x + self.dropout2(ff_output))
+        return x
 
 
 class DecoderBlock(nn.Module):
-    """Generate output tokens once at a time while looking at: 
+    """Generate output tokens once at a time while looking at:
     encoder context representations + previous generated tokens"""
-    def __init__():
-        pass
+    def __init__(
+        self,
+        d_model: int,
+        d_ff: int,
+        num_heads: int,
+        dropout: float = 0.1,
+        bias: bool = False,
+    ):
+        super().__init__()
 
-    def forward():
-        pass
+        self.self_attention = MultiHeadAttention(d_model, num_heads, dropout, bias)
+        self.cross_attention = MultiHeadAttention(d_model, num_heads, dropout, bias)
+        self.feed_forward = FeedForward(d_model, d_ff, dropout)
+
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.norm3 = nn.LayerNorm(d_model)
+
+        self.dropout1 = nn.Dropout(dropout)
+        self.dropout2 = nn.Dropout(dropout)
+        self.dropout3 = nn.Dropout(dropout)
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        encoder_output: torch.Tensor,
+        self_attn_mask: torch.Tensor | None = None,
+        cross_attn_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        self_attn_output = self.self_attention(
+            query=x,
+            attn_mask=self_attn_mask
+        )
+
+        x = self.norm1(x + self.dropout1(self_attn_output))
+
+        cross_attn_output = self.cross_attention(
+            query=x,
+            key=encoder_output,
+            value=encoder_output,
+            attn_mask=cross_attn_mask
+        )
+
+        x = self.norm2(x + self.dropout2(cross_attn_output))
+
+        ff_output = self.feed_forward(x)
+        x = self.norm3(x + self.dropout3(ff_output))
+
+        return x
 
 
 class TransformerEncoder(nn.Module):
@@ -207,7 +299,7 @@ class TransformerEncoder(nn.Module):
 class TransformerDecoder(nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-    
+
     def forward():
         pass
 
@@ -230,7 +322,7 @@ class TransformerEncoderDecoder(nn.Module):
         Args:
             embed_encoder_input:
                 Shape: (batch_size, src_seq_len, d_model)
-            
+
             embed_decoder_input:
                 Shape: (batch_size, tgt_seq_len, d_model)
         """
