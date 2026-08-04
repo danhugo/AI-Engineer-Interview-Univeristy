@@ -237,7 +237,28 @@ class EncoderBlock(nn.Module):
 
 class DecoderBlock(nn.Module):
     """Generate output tokens once at a time while looking at:
-    encoder context representations + previous generated tokens"""
+    encoder context representations + previous generated tokens
+
+    Example: Translate French "Le chat assis" into English "The cat sat"
+        - Encoder input: ["Le", "chat", "assis"]
+        - Decoder input: ["<BOS>", "The", "cat"]
+
+        - Decoder self-attention (causal):
+
+        <BOS\>  ← <BOS\>
+        The     ← <BOS\>, The
+        cat     ← <BOS\>, The, cat
+
+        - Cross-attention: each decoder representation (post self-attention): D_bos, D_The, D_cat
+        looks at all encoder output
+
+        D_bos   ← Le, chat, assis
+        D_The   ← Le, chat, assis
+        D_cat   ← Le, chat, assis
+
+        
+    
+    """
     def __init__(
         self,
         d_model: int,
@@ -267,6 +288,8 @@ class DecoderBlock(nn.Module):
         self_attn_mask: torch.Tensor | None = None,
         cross_attn_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        # look at the current and previous tokens
+        # attn_mask: causal mask force token to look at preceding tokens
         self_attn_output = self.self_attention(
             query=x,
             attn_mask=self_attn_mask
@@ -274,6 +297,7 @@ class DecoderBlock(nn.Module):
 
         x = self.norm1(x + self.dropout1(self_attn_output))
 
+        # cross_attn_mask prevent token to look at <PAD> token in encoder output
         cross_attn_output = self.cross_attention(
             query=x,
             key=encoder_output,
@@ -290,73 +314,125 @@ class DecoderBlock(nn.Module):
 
 
 class TransformerEncoder(nn.Module):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def forward():
-        pass
-
-class TransformerDecoder(nn.Module):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def forward():
-        pass
-
-
-class TransformerEncoderDecoder(nn.Module):
     def __init__(
         self,
-        num_layer: int,
+        num_layers: int,
         d_model: int,
         d_ff: int,
-        d_embed: int,
-        num_head: int,
-        drop_out: float = 0.1,
+        num_heads: int,
+        dropout: float = 0.1,
+        bias: bool = False,
+    ):
+        super().__init__()
+        self.layers = nn.ModuleList(
+            [EncoderBlock(d_model, d_ff, num_heads, dropout, bias) for _ in range(num_layers)]
+        )
+
+    def forward(self, x: torch.Tensor, attn_mask: torch.Tensor | None = None) -> torch.Tensor:
+        for layer in self.layers:
+            x = layer(x, attn_mask)
+
+        return x
+
+
+class TransformerDecoder(nn.Module):
+    def __init__(
+        self,
+        num_layers: int,
+        d_model: int,
+        d_ff: int,
+        num_heads: int,
+        dropout: float = 0.1,
         bias: bool = True,
     ):
-        pass
+        super().__init__()
+        self.layers = nn.ModuleList([
+            DecoderBlock(
+                d_model=d_model,
+                d_ff=d_ff,
+                num_heads=num_heads,
+                dropout=dropout,
+                bias=bias,
+            )
+            for _ in range(num_layers)
+        ])
 
-    def forward(self, embed_encoder_input: torch.Tensor, embed_decoder_input: torch.Tensor, padding_mask: bool = None) -> torch.Tensor:
-        """
-        Args:
-            embed_encoder_input:
-                Shape: (batch_size, src_seq_len, d_model)
 
-            embed_decoder_input:
-                Shape: (batch_size, tgt_seq_len, d_model)
-        """
-        pass
-
+    def forward(
+        self,
+        x: torch.Tensor,
+        encoder_output: torch.Tensor,
+        self_attn_mask: torch.Tensor | None = None,
+        cross_attn_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        for layer in self.layers:
+            x = layer(x, encoder_output, self_attn_mask, cross_attn_mask)
+        return x
+    
 
 class Transformer(nn.Module):
     def __init__(
         self,
-        src_vocab_size: int,
-        tgt_vocab_size: int,
+        vocab_size: int,
+        padding_idx: int,
         num_encoder_layers: int,
         num_decoder_layers: int,
-        num_heads: int,
         d_model: int,
         d_ff: int,
+        num_heads: int,
         max_seq_len: int = 512,
-        dropout: float = 0.1,
+        drop_out: float = 0.1,
+        bias: bool = False,
     ):
+        super().__init__()
+
+        if d_model % 2 != 0:
+            raise ValueError("d_model must be even")
+        
+        self.d_model = d_model
+        self.padding_idx = padding_idx
+        self.embedding = Embedding(vocab_size, d_model, padding_idx)
+        self.pe = PositionalEncoding(d_model, max_seq_len, drop_out)
+        self.encoder = TransformerEncoder(num_encoder_layers, d_model, d_ff, num_heads, drop_out, bias)
+        self.decoder = TransformerDecoder(num_decoder_layers, d_model, d_ff, num_heads, drop_out, bias)
+        self.output_projection = nn.Linear(d_model, vocab_size, bias=True)
+
+    def create_src_mask(self, src_tokens: torch.Tensor) -> torch.Tensor:
+        # (batch, src_len) -> (batch, 1, 1, src_len)
+        return src_tokens.ne(self.padding_idx)[:, None, None, :]
+
+    def create_target_mask(self, tgt_tokens: torch.Tensor) -> torch.Tensor:
+        """Return target mask combining both padding mask and causal mask: (batch, 1, tgt_len, tgt_len)"""
+        tgt_len = tgt_tokens.shape[1]
+        padding_mask = tgt_tokens.ne(self.padding_idx)[:, None, None, :] # (batch, 1, 1, tgt_len)
+        causal_mask = torch.ones((tgt_len, tgt_len), dtype=torch.bool, device=tgt_tokens.device).tril()
+        causal_mask = causal_mask[None, None, :, :] # (1, 1, tgt_len, tgt_len)
+        return causal_mask & padding_mask
+
+    def forward(self, src_tokens: torch.Tensor, tgt_tokens: torch.Tensor,) -> torch.Tensor:
         """
         Args:
-            src_vocab_size: Number of possible input tokens.
-            tgt_vocab_size: Number of possible ouput tokens.
-            num_encoder_layers: Number of encoder blocks.
-            num_decoder_layers: Number of decoder blocks.
-            num_heads: Number of attention heads.
-            d_model: embedding/hidden size.
-            d_ff: Hidden size inside feed-forward network.
-            max_seq_len: Maximum sequence length for positional encoding/embedding.
-            dropout: Dropout probability.
+            src_tokens:
+                Shape: (batch_size, src_len)
 
-
+            tgt_tokens:
+                Shape: (batch_size, tgt_len)
         """
-        pass
+        src_mask = self.create_src_mask(src_tokens) # (batch, 1, 1, src_len)
+        tgt_mask = self.create_target_mask(tgt_tokens) # (batch, 1, tgt_len, tgt_len)
 
-    def forward():
-        pass
+        src = self.embedding(src_tokens)
+        src = self.pe(src)
+        tgt = self.embedding(tgt_tokens)
+        tgt = self.pe(tgt)
+
+        encoder_output = self.encoder(x=src, attn_mask=src_mask) # src_mask broad cast to (batch, num_heads, src_len, src_len)
+        decoder_output = self.decoder(
+            x=tgt, 
+            encoder_output=encoder_output, 
+            self_attn_mask=tgt_mask, # broadcast to (batch, num_heads, tgt_len, tgt_len)
+            cross_attn_mask=src_mask # broadcast to (batch, num_heads, tgt_len, src_len)
+        )
+
+        logits = self.output_projection(decoder_output)
+        return logits
