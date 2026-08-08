@@ -674,6 +674,45 @@ It also explains a familiar artifact: `é` is bytes `c3 a9`, which map to `Ã` a
 `©`. A vocab file full of `Ã©` is not a bug — it is UTF-8 bytes shown one at a
 time.
 
+### Using the library: the one argument that matters
+
+Training a byte-level BPE with HuggingFace `tokenizers` looks like this:
+
+```python
+tokenizer = Tokenizer(models.BPE())          # note: no unk_token
+tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=True)
+tokenizer.decoder = decoders.ByteLevel()
+
+trainer = trainers.BpeTrainer(
+    vocab_size=8000,
+    special_tokens=["<pad>", "<unk>", "<bos>", "<eos>"],
+    initial_alphabet=pre_tokenizers.ByteLevel.alphabet(),   # <- the important one
+)
+```
+
+`initial_alphabet` seeds all 256 byte tokens. **Leave it out and you do not
+have byte-level BPE**, even with a ByteLevel pre-tokenizer. The base vocabulary
+becomes only the characters that appeared in training, and anything else has
+nothing to fall back to.
+
+Setting `unk_token` makes this worse by hiding it. With an unk declared, unseen
+characters quietly become `<unk>` and the failure looks like normal operation.
+Without one, the same input raises instead of silently corrupting.
+
+This exact bug shipped in this project. The tokenizer was trained on 29k
+German and English sentences, so every character in the corpus worked and a
+round-trip test on a German sentence passed. It only broke on characters the
+training data never saw:
+
+```text
+before:  "日本語 🎉 çøß"  ->  [.., <unk>, .., <unk>, ..]  -> cannot decode back
+after:   "日本語 🎉 çøß"  ->  round-trips exactly
+```
+
+The lesson for testing: verify a tokenizer on characters **outside** its
+training corpus. In-domain text passes either way, so it proves nothing about
+the property you actually care about.
+
 ### What models use today
 
 Byte-level BPE is the default everywhere.
