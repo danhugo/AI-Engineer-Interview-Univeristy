@@ -73,7 +73,12 @@ def train_tokenizer(
     """
     from tokenizers import Tokenizer, decoders, models, pre_tokenizers, trainers
 
-    tokenizer = Tokenizer(models.BPE(unk_token="<unk>"))
+    # No unk_token. Setting one makes this character-level BPE with a fallback:
+    # any character absent from the training corpus becomes <unk> and the text
+    # can no longer be decoded back. Byte-level BPE has no such case, so the
+    # fallback should be unreachable — and declaring it hides the bug below.
+    tokenizer = Tokenizer(models.BPE())
+
     # ByteLevel with add_prefix_space so a leading word is tokenized the same
     # whether or not it starts the sentence
     tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=True)
@@ -82,6 +87,11 @@ def train_tokenizer(
     trainer = trainers.BpeTrainer(
         vocab_size=vocab_size,
         special_tokens=SPECIAL_TOKENS,  # order fixes the IDs at 0,1,2,3
+        # The 256 byte tokens must be seeded explicitly. Without this the base
+        # vocabulary is only the characters that appeared in training, so an
+        # unseen byte has nothing to fall back to. This one argument is the
+        # difference between byte-level and character-level BPE.
+        initial_alphabet=pre_tokenizers.ByteLevel.alphabet(),
         show_progress=False,
     )
     tokenizer.train_from_iterator(corpus, trainer=trainer)
