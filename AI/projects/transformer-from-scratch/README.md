@@ -709,3 +709,157 @@ instead of raw count. This favors pairs that really belong together over pairs
 that are just both common.
 
 BPE won because it is simple, fast, and byte-level BPE removes `<UNK>` entirely.
+
+# Training Pipeline
+
+Tokenizer, data, and architecture are not enough to train. This section covers
+what sits between them.
+
+## What goes where
+
+The project follows one rule, the same one behind `data.py` and `dataset.py`:
+
+- **From-scratch code is for study.** Each piece has a test proving it matches
+  the library version. `train.py` never imports it.
+- **The real pipeline uses libraries.**
+- **The model is the exception.** `transformer.py` stays hand-written.
+
+| Study (tested against) | Real pipeline uses |
+|---|---|
+| `optim.py` — Adam, AdamW | `torch.optim.AdamW` |
+| `schedule.py` — Noam | `torch.optim.lr_scheduler.LambdaLR` |
+| `loss.py` — CE + smoothing | `nn.CrossEntropyLoss` |
+| `metrics.py` — BLEU, perplexity | `sacrebleu` |
+
+## Teacher forcing and the shift
+
+Training does not generate. It shows the decoder the correct prefix and asks
+for the next token. That is teacher forcing, and it means one target sequence
+becomes two tensors:
+
+```text
+stored:   <bos>  5  1  4  <eos>
+
+tgt_in:   <bos>  5  1  4          decoder reads
+tgt_out:     5   1  4  <eos>      decoder must predict
+```
+
+The same tensor, offset by one. At every position the decoder reads `tgt_in[t]`
+and is scored against `tgt_out[t]`.
+
+Get the shift backwards and the model learns to copy its own input. Loss drops,
+the curve looks healthy, and generation produces garbage. This lives in
+`collate.py` and is the most-tested file in the project.
+
+Generation cannot use teacher forcing — there is no target. Tokens come out one
+at a time and feed back in, which is why a model with a shift bug looks fine
+until you decode.
+
+## Why warmup is not optional
+
+Adam divides the update by $\sqrt{v}$, the running mean of squared gradients.
+At step 1 that estimate comes from a single sample, so it is noise. Dividing by
+the square root of noise gives huge, badly-aimed steps at the moment the model
+is most fragile.
+
+Warmup starts the learning rate near zero and ramps it up. By the time the rate
+is high, $v$ is a real estimate. The Noam schedule:
+
+$$
+lr(step) = d_{\text{model}}^{-0.5} \cdot \min(step^{-0.5},\; step \cdot warmup^{-1.5})
+$$
+
+Two branches crossing at `step == warmup`:
+
+- `step < warmup` → `step * warmup^-1.5`, grows linearly
+- `step > warmup` → `step^-0.5`, decays as inverse sqrt
+
+The $d_{\text{model}}^{-0.5}$ factor shrinks the peak for wider models, so the
+same schedule transfers across sizes.
+
+**Practical trap:** warmup is counted in *steps*, not epochs. The first toy run
+here did 250 steps total against a 400-step warmup — the learning rate never
+reached its peak, and the model looked broken when it was only undertrained.
+
+## Padding appears in three places
+
+`padding_idx` is not one setting. Miss any of the three and training quietly
+degrades:
+
+| Where | What it does | If missed |
+|---|---|---|
+| `Embedding` | zeroes the pad row's gradient | pad token learns a meaning |
+| `CrossEntropyLoss(ignore_index=0)` | drops pad from loss and count | model rewarded for predicting `<pad>` |
+| attention mask | blocks attending to pad | real tokens attend to nothing |
+
+## Label smoothing
+
+The hard target says $p_{\text{correct}} = 1$. To reach it the model must push
+one logit to infinity — it becomes overconfident, and confident mistakes are
+expensive. Smoothing spreads $\epsilon$ across all classes:
+
+$$
+target_{\text{correct}} = 1 - \epsilon + \frac{\epsilon}{V}, \quad
+target_{\text{other}} = \frac{\epsilon}{V}
+$$
+
+The paper uses $\epsilon = 0.1$. It slightly *worsens* perplexity and reliably
+*improves* BLEU, because translation has many valid outputs and total
+confidence in one is wrong.
+
+Evaluate perplexity with smoothing off, or the number is not comparable.
+
+## The overfit gate
+
+The highest-value test in the pipeline:
+
+```bash
+python train.py --task toy --overfit
+```
+
+Train on one batch and expect loss near zero. A model that cannot memorize a
+single batch has a bug, not a tuning problem. Three causes show up here:
+
+- target shift wrong → loss plateaus well above zero
+- causal mask wrong → loss drops suspiciously fast, generation is garbage
+- pad handling wrong → loss drops but decode emits `<pad>`
+
+**Turn dropout off for this.** Dropout exists to prevent memorization, which is
+the exact thing being measured. With dropout at 0.1 the gate stalls near 0.7
+and reports a bug that does not exist — a mistake made while building this.
+
+## Two fixes the model needed
+
+**Embedding scale.** Multiply embeddings by $\sqrt{d_{\text{model}}}$ before
+adding positional encoding. PE values sit in $[-1, 1]$ while embedding rows
+start near unit normal. Without the scale the positional signal is
+proportionally too loud, and early training is spent undoing it.
+
+**Xavier init.** `nn.Linear` defaults to Kaiming, tuned for ReLU fan-in.
+Transformers stack many residual projections; Xavier keeps forward activation
+variance and backward gradient variance both near 1.
+
+## Diagnosing a weak model
+
+When the toy model produced the right digits in the wrong order, the question
+was whether decoding or the model was at fault. The split test:
+
+Run the model **teacher-forced** and measure token accuracy. Compare to greedy
+decode.
+
+- teacher-forced good, greedy bad → decoding bug
+- both bad → the model itself is weak
+
+Here both were ~0.5, so the decoder was fine and the model was data-starved.
+Check this before tuning anything.
+
+## Running it
+
+```bash
+python train.py --task toy --overfit      # correctness gate, seconds
+python train.py --task toy                # synthetic reversal
+python train.py --task multi30k           # real de->en translation
+
+python -m pytest test_study_modules.py    # from-scratch vs library
+python -m pytest test_pipeline.py         # collate, data, checkpoints
+```
