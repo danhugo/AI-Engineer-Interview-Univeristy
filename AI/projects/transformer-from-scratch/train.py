@@ -251,13 +251,15 @@ def train(cfg: argparse.Namespace) -> None:
                 print(
                     f"epoch {epoch} step {step:6d}  "
                     f"loss {running / seen:.4f}  lr {lr:.2e}  "
-                    f"{time.time() - start:.0f}s"
+                    f"{time.time() - start:.0f}s",
+                    flush=True,  # long runs are usually redirected to a file
                 )
                 running, seen = 0.0, 0
 
         val = evaluate(model, val_loader, eval_criterion, device)
         print(
-            f"-- epoch {epoch}: val loss {val['loss']:.4f}  ppl {val['ppl']:.2f}"
+            f"-- epoch {epoch}: val loss {val['loss']:.4f}  ppl {val['ppl']:.2f}",
+            flush=True,
         )
 
         if val["loss"] < best_val:
@@ -340,7 +342,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--max-len", type=int, default=64)
     p.add_argument("--vocab-size", type=int, default=8000)
 
-    p.add_argument("--warmup", type=int, default=400)
+    # default depends on the task; resolved after parsing
+    p.add_argument("--warmup", type=int, default=None)
     p.add_argument("--weight-decay", type=float, default=0.01)
     p.add_argument("--label-smoothing", type=float, default=0.1)
     p.add_argument("--clip", type=float, default=1.0)
@@ -351,10 +354,15 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--log-every", type=int, default=50)
 
     cfg = p.parse_args()
-    if cfg.task == "multi30k":
-        # real data needs a longer warmup and more capacity than the toy task
-        if "--warmup" not in __import__("sys").argv:
-            cfg.warmup = 4000
+
+    if cfg.warmup is None:
+        # Warmup is counted in steps, not epochs. Multi30k does ~450 steps per
+        # epoch so 4000 is a few epochs; the toy task does far fewer, and a
+        # 4000-step warmup there would end training before the rate peaked.
+        cfg.warmup = 4000 if cfg.task == "multi30k" else 400
+
+    if cfg.warmup <= 0:
+        p.error("--warmup must be positive")
     return cfg
 
 
