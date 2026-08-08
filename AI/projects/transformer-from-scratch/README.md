@@ -863,6 +863,51 @@ Raising the toy corpus from 2,000 to 20,000 examples confirmed it:
 Same code, same hyperparameters. The only change was more data and enough
 steps to get past warmup.
 
+## The logits tensor is the memory bottleneck
+
+The model here has 9.6M parameters — small. But the first Multi30k run did zero
+logged steps in 24 minutes. Benchmarking one step at a time found why.
+
+The output projection produces `(batch, seq_len, vocab)`. That tensor is not
+counted in parameter size, and it dwarfs the model:
+
+$$
+128 \times 64 \times 8000 \times 4 \text{ bytes} = 262 \text{ MB}
+$$
+
+For one forward pass. Cross-entropy then builds a log-softmax over it, and
+backward holds a gradient of the same shape.
+
+Measured on MPS, same model and data:
+
+| Config | Logits | ms/step | s/epoch |
+|---|---|---|---|
+| B=128, T=64 | 262 MB | 9956 | 2250 |
+| B=32, T=64 | 66 MB | 625 | 566 |
+| B=16, T=64 | 33 MB | 210 | 380 |
+| B=64, T=32 | 66 MB | 385 | **174** |
+
+The jump from 66 MB to 262 MB is not 4x slower, it is **16x** slower. Past a
+threshold the allocation stops fitting and everything falls off a cliff.
+
+Two things follow.
+
+**Halving sequence length beats halving batch.** Attention is $O(T^2)$ and
+logits are $O(T)$, so `T` pays twice. `B=64, T=32` and `B=32, T=64` produce
+identical 66 MB logits, but the shorter one is 1.6x faster per step and
+processes twice the examples.
+
+**Measure your sequence lengths before setting max_len.** Multi30k:
+
+```text
+src: mean 14.8  p50 14  p90 22  p99 32  max 53
+tgt: mean 16.3  p50 15  p90 22  p99 31  max 50
+```
+
+`max_len=64` was nearly double what the data needs. Cutting to 32 keeps 99% of
+sentences intact and made the run 13x faster. The toy task never exposed any of
+this because its vocabulary is 14 tokens, so its logits were negligible.
+
 ## Running it
 
 ```bash
