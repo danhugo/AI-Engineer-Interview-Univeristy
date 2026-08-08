@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WorkerPool — buffer, two queues, backpressure</title>
+<style>
+  :root {
+    --bg:#0d1117; --panel:#161b22; --fg:#c9d1d9; --muted:#6e7681;
+    --accent:#f0883e; --blue:#7aa2f7; --green:#56d364; --red:#f85149; --purple:#bc8cff;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; background:var(--bg); color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    padding:1.5rem 1rem 3rem;
+  }
+  h1 { font-size:1.4rem; text-align:center; margin:0 0 .2rem; }
+  .sub { text-align:center; color:var(--muted); font-size:.85rem; margin-bottom:1.2rem; }
+  code, pre { font-family:"SF Mono",Menlo,Consolas,monospace; }
+  .code {
+    max-width:920px; margin:0 auto 1.2rem; background:#161b22; border:1px solid #30363d;
+    border-radius:8px; padding:.9rem 1.1rem; font-size:.8rem; line-height:1.5; overflow-x:auto;
+  }
+  .code .hl-line { background:rgba(240,136,62,.12); display:block; margin:0 -.6rem; padding:0 .6rem; border-radius:4px; }
+  .k{color:#ff9e64;} .s{color:#9ece6a;} .c{color:#6e7681;} .n{color:#7aa2f7;} .num{color:#d19a66;}
+
+  .stage {
+    max-width:920px; margin:0 auto; background:var(--panel);
+    border:1px solid #30363d; border-radius:12px; padding:1.5rem;
+  }
+  .config { display:flex; gap:1rem; justify-content:center; margin-bottom:1.2rem; flex-wrap:wrap; font-size:.85rem; }
+  .config .chip {
+    background:#0d1117; border:1px solid #30363d; border-radius:6px; padding:.4rem .8rem;
+    font-family:"SF Mono",Menlo,monospace;
+  }
+  .config .chip b { color:var(--accent); }
+
+  .grid {
+    display:grid; grid-template-columns: 1fr 1fr 1fr; gap:1rem; align-items:stretch;
+  }
+  .col { background:#0d1117; border:1px solid #30363d; border-radius:8px; padding:.7rem; min-height:200px; position:relative; }
+  .col h3 { font-size:.78rem; color:var(--muted); margin:0 0 .4rem; text-transform:uppercase; letter-spacing:.05em; }
+  .col .arrow { position:absolute; font-size:1.3rem; color:var(--accent); top:50%; }
+
+  .item {
+    display:block; padding:.3rem .5rem; margin:.25rem 0; border-radius:5px;
+    font-size:.72rem; font-family:"SF Mono",Menlo,monospace; border:1px solid;
+    transition:all .4s ease; text-align:center;
+  }
+  .i0{border-color:var(--accent);color:var(--accent);background:rgba(240,136,62,.08);}
+  .i1{border-color:var(--purple);color:var(--purple);background:rgba(188,140,255,.08);}
+  .i2{border-color:var(--green);color:var(--green);background:rgba(86,211,100,.08);}
+  .i3{border-color:var(--red);color:var(--red);background:rgba(248,81,73,.08);}
+  .i4{border-color:#e3b341;color:#e3b341;background:rgba(227,179,65,.08);}
+  .item.empty { border-style:dashed; color:var(--muted); background:none; }
+  .item.sentinel {
+    border-color:#e3b341; color:#e3b341; background:rgba(227,179,65,.12);
+    border-style:dashed; font-style:italic;
+  }
+  .item.sentinel::before { content:"⛔ "; font-style:normal; }
+
+  .slot { height:32px; margin:.25rem 0; border:1px dashed #30363d; border-radius:5px; }
+  .slot.filled { border-style:solid; }
+
+  .col .count { position:absolute; bottom:.4rem; right:.6rem; font-size:.7rem; color:var(--muted); }
+  .col.full { border-color:var(--red); }
+  .full-flag {
+    position:absolute; top:.3rem; right:.5rem; font-size:.65rem; color:var(--red);
+    background:rgba(248,81,73,.15); padding:.1rem .4rem; border-radius:4px;
+    opacity:0; transition:opacity .3s;
+  }
+  .full-flag.show { opacity:1; }
+
+  .workers-col .worker {
+    background:#161b22; border:1px solid #30363d; border-radius:6px; padding:.4rem; margin:.3rem 0; font-size:.72rem;
+  }
+  .workers-col .wname { color:var(--muted); }
+  .workers-col .wact { font-family:"SF Mono",Menlo,monospace; min-height:1.2em; margin-top:.15rem; }
+
+  .main-col .consume { font-size:.72rem; font-family:"SF Mono",Menlo,monospace; }
+
+  .controls { text-align:center; margin-top:1rem; }
+  .controls button {
+    background:#21262d; color:var(--fg); border:1px solid #30363d;
+    padding:.4rem 1rem; border-radius:6px; cursor:pointer; font-size:.8rem; margin:0 .3rem;
+  }
+  .controls button:hover{ background:#30363d; }
+  .controls .speed { color:var(--muted); font-size:.75rem; margin-left:.5rem; }
+  .controls .stepinfo { color:var(--accent); font-size:.75rem; margin-left:.5rem; font-family:"SF Mono",Menlo,monospace; }
+  .steptext {
+    max-width:920px; margin:.8rem auto 0; background:#161b22; border:1px solid #30363d;
+    border-radius:8px; padding:.6rem 1rem; font-size:.82rem; min-height:2.6em;
+  }
+  .steptext .what { color:var(--accent); font-weight:600; }
+  .steptext .why { color:var(--muted); }
+
+  .note { max-width:920px; margin:1rem auto 0; font-size:.8rem; color:var(--muted); line-height:1.5; }
+  .note b { color:var(--fg); }
+  .legend { display:flex; gap:1rem; justify-content:center; margin-top:1rem; font-size:.72rem; color:var(--muted); flex-wrap:wrap; }
+  .legend i{width:12px;height:12px;border-radius:3px;display:inline-block;margin-right:.3rem;vertical-align:middle;}
+</style>
+</head>
+<body>
+
+<h1>WorkerPool: buffer, two queues, backpressure</h1>
+<div class="sub">Visualizing <code>buf = prefetch_factor × num_workers</code>, the two queues, and <code>for batch in bg: yield batch</code></div>
+
+<div class="code">
+<span class="c"># buffer sized from config — this is how many batches stay buffered ahead</span><br>
+buf = <span class="n">max</span>(<span class="num">1</span>, self.prefetch_factor * self.num_workers)<br>
+bg = <span class="n">WorkerPool</span>(<br>
+&nbsp;&nbsp;&nbsp;&nbsp;dataset=self.dataset,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;collate_fn=self.collate_fn,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;num_workers=self.num_workers,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;buffer=buf,<br>
+)<br>
+<span class="hl-line"><span class="k">try</span>:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;bg.start(batch_index_lists())&nbsp;&nbsp;&nbsp;<span class="c"># feed index lists, spawn workers</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="k">for</span> batch <span class="k">in</span> bg:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="c"># consume prepared batches (backpressure-aware)</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="k">yield</span> batch</span>
+</div>
+
+<div class="config">
+  <div class="chip">prefetch_factor = <b>2</b></div>
+  <div class="chip">num_workers = <b>2</b></div>
+  <div class="chip">→ buf = max(1, 2×2) = <b>4</b></div>
+  <div class="chip">batches in epoch = <b>6</b></div>
+</div>
+
+<div class="stage">
+  <div class="grid">
+
+    <div class="col">
+      <h3>① index_q<br>main → workers</h3>
+      <div style="font-size:.7rem;color:var(--muted);margin-bottom:.3rem">all index lists queued up front by start()</div>
+      <div id="index-q"></div>
+      <div class="count" id="iq-count"></div>
+    </div>
+
+    <div class="col workers-col">
+      <h3>② workers (processes)<br>fetch + collate</h3>
+      <div id="workers"></div>
+    </div>
+
+    <div class="col" id="batch-col">
+      <h3>③ batch_q (buffered, max=buf=4)<br>workers → main</h3>
+      <div class="full-flag" id="full-flag">⚠ FULL — worker blocks</div>
+      <div id="batch-q"></div>
+      <div class="count" id="bq-count"></div>
+    </div>
+
+  </div>
+
+  <div style="margin-top:1rem; background:#0d1117; border:1px solid #30363d; border-radius:8px; padding:.7rem;">
+    <h3 style="font-size:.78rem;color:var(--muted);margin:0 0 .4rem;text-transform:uppercase;letter-spacing:.05em;">④ main: <code style="color:var(--accent)">for batch in bg: yield batch</code></h3>
+    <div class="consume" id="consume">waiting for first batch…</div>
+  </div>
+</div>
+
+<div class="steptext" id="steptext"></div>
+
+<div class="legend">
+  <span><i style="background:var(--accent)"></i>batch 0</span>
+  <span><i style="background:var(--purple)"></i>batch 1</span>
+  <span><i style="background:var(--green)"></i>batch 2</span>
+  <span><i style="background:var(--red)"></i>batch 3</span>
+  <span><i style="background:#e3b341"></i>batch 4</span>
+  <span><i style="background:#e3b341;opacity:.5"></i>sentinel (None = "stop")</span>
+  <span style="color:var(--red)">⚠ backpressure when batch_q full</span>
+</div>
+
+<div class="controls">
+  <button id="prev">◀ prev step</button>
+  <button id="next">next step ▶</button>
+  <button id="play">▶ auto</button>
+  <button id="reset">↺ reset</button>
+  <span class="speed">auto-speed: <input type="range" id="speed" min="0.2" max="3" step="0.1" value="0.7"> <span id="speedval">0.7×</span></span>
+  <span class="stepinfo" id="stepinfo">step 0 / 0</span>
+</div>
+
+<div class="note">
+  <b>Two queues, opposite directions.</b> <code>index_q</code> (left) carries tiny index lists from main to workers — all queued up front by <code>start()</code>. Workers pull one, fetch <code>dataset[i]</code>, collate, and put the prepared batch into <code>batch_q</code> (right). That queue is <b>bounded to buf = prefetch_factor × num_workers = 4</b>. <b>Backpressure:</b> when batch_q is full, a worker <code>put()</code> blocks (red ⚠) — it does not pile up unbounded batches in RAM. The main loop <code>for batch in bg</code> pulls one batch at a time, freeing a slot so a blocked worker can proceed.
+</div>
+
+<script>
+const PF=2, NW=2, BUF=PF*NW, NB=6; // 4 buffer, 6 batches
+const NAMES=['worker A','worker B'];
+const C=['i0','i1','i2','i3','i4'];
+const el=id=>document.getElementById(id);
+
+// ---------------------------------------------------------------------------
+// Build a deterministic list of STEPS. Each step = a full state snapshot +
+// a short description of what changed and why. Step 0 is the initial state.
+// Navigation: Next/Prev walk this list; Auto plays through it on a timer.
+// ---------------------------------------------------------------------------
+let steps=[];
+let pos=0, autoTimer=null, speed=0.7;
+
+function snap(indexQ, batchQ, workers, consuming, produced, what, why){
+  // deep-copy the mutable containers so each step is an independent snapshot
+  return {
+    indexQ:[...indexQ], batchQ:[...batchQ],
+    workers:workers.map(w=>({...w})),
+    consuming, produced:[...produced], what, why
+  };
+}
+
+function buildSteps(){
+  steps=[];
+  // index_q holds items: a batch number (0..NB-1) or 'SENTINEL' (one per worker).
+  // start() queues all index lists, then NW sentinels so each worker sees "stop".
+  let indexQ=[];
+  for(let b=0;b<NB;b++) indexQ.push(b);
+  for(let w=0;w<NW;w++) indexQ.push('SENTINEL');
+  let batchQ=[];
+  let produced=[];
+  let workers=Array(NW).fill(null).map(()=>({busy:false,batch:null,blocked:false}));
+  let consuming=false;
+
+  steps.push(snap(indexQ,batchQ,workers,consuming,produced,
+    'start()','All 6 index lists queued, then 2 SENTINELs (one per worker) into index_q. batch_q empty. buf=4.'));
+
+  const push=(what,why)=>steps.push(snap(indexQ,batchQ,workers,consuming,produced,what,why));
+
+  // Deterministic interleaving demonstrating: production, backpressure,
+  // sentinel consumption (worker pulls None -> exits, pushes None to batch_q),
+  // and the main loop stopping when it sees a sentinel.
+  const script=[
+    'w0 claim','w1 claim',
+    'w0 done',                 // batch 0 -> batch_q [0]
+    'w1 done',                 // batch 1 -> [0,1]
+    'w1 claim','w0 claim',
+    'w1 done',                 // 2 -> [0,1,2]
+    'w0 done',                 // 3 -> [0,1,2,3] FULL
+    'w1 claim',                // claims sentinel (last index list was 5 already? no)
+    'w1 block',
+    'c consume',               // drain 0
+    'w1 unblock','w1 done',
+    'w0 claim','w0 block',
+    'c consume',               // drain 1
+    'w0 unblock','w0 done',
+    // now index_q has only sentinels left
+    'w1 claim-sent',           // worker 1 pulls sentinel -> pushes None to batch_q, exits
+    'w0 claim-sent',           // worker 0 pulls sentinel -> pushes None, exits
+    'c consume','c consume','c consume','c consume',  // drain batches 2,3,4,5
+    'c see-sent',              // main pulls first None from batch_q -> StopIteration
+    'c drain',                 // close() drains leftover sentinel
+    'c done'
+  ];
+
+  function workerClaim(w){
+    const item=indexQ.shift();          // a batch number
+    workers[w]={busy:true,batch:item,blocked:false,kind:'batch'};
+    push(`worker ${w==='w0'?0:1} claims batch ${item}`,
+      `Pulls next index list from index_q. Fetches dataset[i] for each index, collates.`);
+  }
+  function workerClaimSentinel(w){
+    indexQ.shift();                     // discard the sentinel
+    workers[w]={busy:true,batch:'SENTINEL',blocked:false,kind:'sent'};
+    push(`worker ${w==='w0'?0:1} pulls SENTINEL`,
+      `index_q had None (stop signal). Worker will put None into batch_q and exit.`);
+    // worker puts None into batch_q and exits
+    batchQ.push('SENTINEL');
+    workers[w]={busy:false,batch:null,blocked:false,kind:'idle'};
+    push(`worker ${w==='w0'?0:1} puts None into batch_q, exits`,
+      `Sentinel forwarded so the main loop knows the stream ended. Worker process ends.`);
+  }
+  function workerDone(w){
+    const b=workers[w].batch;
+    batchQ.push(b);
+    workers[w]={busy:false,batch:null,blocked:false,kind:'idle'};
+    push(`worker ${w==='w0'?0:1} finishes batch ${b}`,
+      `Puts prepared batch into batch_q (${batchQ.length}/${BUF}).`);
+  }
+  function workerBlock(w){
+    workers[w].blocked=true;
+    push(`worker ${w==='w0'?0:1} ⚠ BLOCKED`,
+      `batch_q is full (${batchQ.length}/${BUF}). put() blocks — backpressure. Worker waits.`);
+  }
+  function workerUnblock(w){
+    workers[w].blocked=false;
+    push(`worker ${w==='w0'?0:1} unblocks`,
+      `Consumer drained a batch, freeing a slot. put() proceeds.`);
+  }
+  function consume(){
+    const b=batchQ.shift();
+    consuming=b;
+    push(`main: for batch in bg → yield batch ${b}`,
+      `batch_q now ${batchQ.length}/${BUF}. Training step uses the batch.`);
+    produced.push(b); consuming=false;
+    push(`batch ${b} consumed`,
+      `produced so far: ${produced.join(', ')}.`);
+  }
+  function seeSentinel(){
+    batchQ.shift();                     // pull the first None
+    push(`main: pulls None (sentinel) from batch_q`,
+      `__next__ sees the sentinel -> raises StopIteration. The for loop ends.`);
+  }
+  function drain(){
+    // close() drains any leftover items (the second sentinel) from batch_q
+    while(batchQ.length) batchQ.shift();
+    push(`close() drains leftover sentinel`,
+      `The second worker's None is discarded during shutdown. Queues now empty.`);
+  }
+  function done(){
+    push('epoch complete', `All ${NB} batches produced and consumed. Both workers exited. Queues empty.`);
+  }
+
+  for(const s of script){
+    const parts=s.split(' ');
+    const w=parts[0];
+    if(s==='c done') done();
+    else if(s==='c see-sent') seeSentinel();
+    else if(s==='c drain') drain();
+    else if(parts[1]==='claim-sent') workerClaimSentinel(w);
+    else if(parts[1]==='claim') workerClaim(w);
+    else if(parts[1]==='done') workerDone(w);
+    else if(parts[1]==='block') workerBlock(w);
+    else if(parts[1]==='unblock') workerUnblock(w);
+    else if(parts[1]==='consume') consume();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// render a given step snapshot
+// ---------------------------------------------------------------------------
+function render(s){
+  el('index-q').innerHTML = s.indexQ.length?
+    s.indexQ.map(b=> b==='SENTINEL' ?
+      `<div class="item sentinel">sentinel (None)</div>` :
+      `<div class="item ${C[b]}">idx list → batch ${b}</div>`).join('') :
+    '<div class="item empty">empty (all claimed)</div>';
+  el('iq-count').textContent = s.indexQ.length+' left';
+
+  el('workers').innerHTML = s.workers.map((w,idx)=>{
+    let act='idle';
+    if(w.blocked) act='⚠ blocked (batch_q full)';
+    else if(w.busy && w.batch!==null){
+      act = w.kind==='sent' ? `pulling sentinel → exit` : `building batch ${w.batch}`;
+    }
+    return `<div class="worker"><span class="wname">${NAMES[idx]}</span><div class="wact">${act}</div></div>`;
+  }).join('');
+
+  el('batch-col').classList.toggle('full', s.batchQ.length>=BUF);
+  el('full-flag').classList.toggle('show', s.batchQ.length>=BUF);
+  let html='';
+  for(let i=0;i<BUF;i++){
+    if(i<s.batchQ.length){
+      const b=s.batchQ[i];
+      html += b==='SENTINEL' ?
+        `<div class="item sentinel">sentinel (None)</div>` :
+        `<div class="item ${C[b]}">batch ${b}</div>`;
+    } else html+=`<div class="slot"></div>`;
+  }
+  el('batch-q').innerHTML=html;
+  el('bq-count').textContent = s.batchQ.length+' / '+BUF;
+
+  if(s.consuming) el('consume').innerHTML=`<span style="color:var(--green)">→ yielding batch ${s.consuming} to training loop</span>`;
+  else if(s.produced.length) el('consume').innerHTML=`<span style="color:var(--muted)">produced so far: ${s.produced.join(', ')}</span>`;
+  else el('consume').textContent='waiting for first batch…';
+
+  el('steptext').innerHTML = `<span class="what">${s.what}</span> <span class="why">— ${s.why}</span>`;
+  el('stepinfo').textContent = `step ${pos} / ${steps.length-1}`;
+}
+
+function go(n){
+  pos=Math.max(0,Math.min(steps.length-1,n));
+  render(steps[pos]);
+}
+function next(){ go(pos+1); }
+function prev(){ go(pos-1); }
+function reset(){ stopAuto(); pos=0; render(steps[0]); }
+function autoStep(){
+  if(pos>=steps.length-1){ stopAuto(); return; }
+  next();
+}
+function startAuto(){
+  if(autoTimer) return;
+  const ms=Math.max(250, 1200/speed);
+  autoTimer=setInterval(()=>{
+    if(pos>=steps.length-1){ stopAuto(); el('play').textContent='▶ auto'; return; }
+    next();
+  }, ms);
+  el('play').textContent='⏸ stop';
+}
+function stopAuto(){ if(autoTimer){clearInterval(autoTimer);autoTimer=null;} el('play').textContent='▶ auto'; }
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight'){ e.preventDefault(); stopAuto(); next(); }
+  if(e.key==='ArrowLeft'){ e.preventDefault(); stopAuto(); prev(); }
+});
+
+el('next').onclick=()=>{ stopAuto(); next(); };
+el('prev').onclick=()=>{ stopAuto(); prev(); };
+el('play').onclick=()=>{ if(autoTimer) stopAuto(); else startAuto(); };
+el('reset').onclick=reset;
+el('speed').oninput=e=>{ speed=parseFloat(e.target.value); el('speedval').textContent=speed+'×'; if(autoTimer){ stopAuto(); startAuto(); } };
+
+buildSteps();
+render(steps[0]);
+</script>
+</body>
+</html>

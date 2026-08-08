@@ -397,6 +397,28 @@ class Transformer(nn.Module):
         self.decoder = TransformerDecoder(num_decoder_layers, d_model, d_ff, num_heads, drop_out, bias)
         self.output_projection = nn.Linear(d_model, vocab_size, bias=True)
 
+        # Scale applied to embeddings before adding positional encoding.
+        # PE values live in [-1, 1] while embedding rows start at ~N(0, 1).
+        # Without this the positional signal is proportionally too loud, and
+        # early training spends its budget undoing that instead of learning.
+        self.embed_scale = math.sqrt(d_model)
+
+        self._init_weights()
+
+    def _init_weights(self) -> None:
+        """Xavier-uniform on every projection weight.
+
+        nn.Linear defaults to kaiming-uniform, which is tuned for ReLU fan-in.
+        Transformers stack many residual projections; xavier keeps the forward
+        activation variance and the backward gradient variance both near 1,
+        which is what makes deep stacks trainable without extra tricks.
+        """
+        for module in self.modules():
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+
     def create_src_mask(self, src_tokens: torch.Tensor) -> torch.Tensor:
         # (batch, src_len) -> (batch, 1, 1, src_len)
         return src_tokens.ne(self.padding_idx)[:, None, None, :]
@@ -421,9 +443,10 @@ class Transformer(nn.Module):
         src_mask = self.create_src_mask(src_tokens) # (batch, 1, 1, src_len)
         tgt_mask = self.create_target_mask(tgt_tokens) # (batch, 1, tgt_len, tgt_len)
 
-        src = self.embedding(src_tokens)
+        # scale before PE — see self.embed_scale
+        src = self.embedding(src_tokens) * self.embed_scale
         src = self.pe(src)
-        tgt = self.embedding(tgt_tokens)
+        tgt = self.embedding(tgt_tokens) * self.embed_scale
         tgt = self.pe(tgt)
 
         encoder_output = self.encoder(x=src, attn_mask=src_mask) # src_mask broad cast to (batch, num_heads, src_len, src_len)

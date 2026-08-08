@@ -298,3 +298,414 @@ at its current position. Cross-attention needs more care because its queries and
 keys come from different sequences, so $j-i$ may not be meaningful.
 
 ## Multihead Attention Block
+
+# Tokenizers
+
+A tokenizer turns text into token IDs. The embedding block needs IDs, not
+strings.
+
+Two bad extremes:
+
+- **Word level**: vocabulary explodes. Any unseen word becomes `<UNK>`.
+- **Character level**: tiny vocabulary, but sequences get very long. Attention
+  costs $O(n^2)$, so long sequences are expensive.
+
+Subword tokenization sits in the middle. Common words stay one token. Rare words
+split into pieces.
+
+## BPE and Byte-level BPE
+
+### BPE
+
+BPE means Byte Pair Encoding. It was a compression algorithm first, then reused
+for tokenization.
+
+Training is one loop. Each step below is shown on one corpus, used for the rest
+of this section:
+
+```text
+low x5
+log x3
+her x4
+per x3
+```
+
+Target vocabulary size: 13.
+
+**Step 1. Start with a vocabulary of single characters.**
+
+Split every word into characters. The counts stay attached.
+
+```text
+l o w   x5
+l o g   x3
+h e r   x4
+p e r   x3
+```
+
+Vocabulary so far is just the distinct characters — 8 tokens:
+
+```text
+e g h l o p r w
+```
+
+This is the **base vocabulary**. It never shrinks. Every later token is built on
+top of it.
+
+Encoding the corpus at this point costs **45 tokens** — every character is one.
+
+**Step 2. Count every adjacent pair.**
+
+A pair is **two adjacent symbols** in the current sequence. A symbol is whatever
+sits there right now: a single character at the start, an already merged token
+later. Two limits:
+
+- Pairs must be adjacent. In `l o w` the pairs are `l o` and `o w`. Not `l w`.
+- Pairs never cross a **pre-token** boundary. Text is chopped into chunks
+  before BPE runs, and merges stay inside a chunk. The `w` of `low` and the `h`
+  of `her` never pair up.
+
+##### Pre-tokenization is not "split on space"
+
+Easy to get wrong. BPE does not throw spaces away.
+
+The original BPE (`subword-nmt`) does split on whitespace and drops the space,
+adding a `</w>` marker so you know where a word ended. The corpus in this
+walkthrough is written that way — a list of words with counts — because it keeps
+the example readable.
+
+Modern byte-level BPE does not. GPT-2 uses a regex that attaches the space to
+the **front of the next chunk**:
+
+```python
+r"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"
+```
+
+```text
+"the low lower"  ->  ["the", " low", " lower"]
+```
+
+The space is *inside* the chunk, so merges run over it and it ends up inside
+real tokens. `" low"` trains as one token, written `Ġlow` in the GPT-2 vocab.
+That is why `"cat"` and `" cat"` are two different token IDs.
+
+Why chunk at all? Without it, BPE would happily learn junk tokens spanning
+`". The"` or `") {"`. The regex also stops merges from crossing letters into
+digits into punctuation, which keeps the vocabulary cleaner.
+
+SentencePiece takes a third route: replace every space with a visible `▁` and
+run BPE on the raw stream. Same goal, no regex — the space becomes an ordinary
+character the model can merge.
+
+Count inside each word, then multiply by that word's frequency. `l o` appears in
+`low` and `log`, so it scores $5+3=8$. `e r` appears in `her` and `per`, so it
+scores $4+3=7$.
+
+| Pair | Count |
+|------|-------|
+| `l o` | 8 |
+| `e r` | 7 |
+| `o w` | 5 |
+| `h e` | 4 |
+| `o g` | 3 |
+| `p e` | 3 |
+
+**Step 3. Merge the most frequent pair into one new token.**
+
+`l o` wins at 8. Replace it everywhere:
+
+```text
+lo w   x5
+lo g   x3
+h e r  x4
+p e r  x3
+```
+
+`lo` is now a single symbol. The vocabulary grows by exactly one token, from 8
+to 9:
+
+```text
+e g h l o p r w  +  lo
+```
+
+The old `l` and `o` stay in the vocabulary. They are still needed for any word
+that never forms `lo`.
+
+**Step 4. Add that merge to the merge list.**
+
+```text
+1. l + o -> lo
+```
+
+The list is ordered. Rank 1 must always be applied before rank 2, or encoding
+gives different tokens than training did.
+
+**Step 5. Repeat until the vocabulary hits the target size.**
+
+Go back to step 2 and recount. Two numbers move in opposite directions every
+round, so track both:
+
+> **After round 1** — vocab 9 tokens, corpus 37 tokens.
+
+#### Rounds 2 to 5
+
+The key rule: one merge per round, then **recount everything**. A pair's count
+is not stable across rounds.
+
+**Round 2.** Words are `lo w`, `lo g`, `h e r`, `p e r`.
+
+| Pair | Count |
+|------|-------|
+| `e r` | 7 |
+| `lo w` | 5 |
+| `h e` | 4 |
+| `lo g` | 3 |
+| `p e` | 3 |
+
+Two things happened here.
+
+`lo w` appeared with a count of 5. In round 1 it had no count at all — `l o w`
+was three symbols, not a pair. Merging `lo` is what put it on the board. **A
+count can rise by becoming reachable.**
+
+`e r` still sits at 7, untouched. Round 1 merged inside `low` and `log`, and
+neither contains an `e` or an `r`, so nothing about `e r` changed. **A pair only
+loses count when a merge eats one of its own symbols.**
+
+So `e r` wins at 7. Merge `e r` -> `er`.
+
+Note what just happened: `er` is a 2-character token and it merged **before**
+`low`, a 3-character token. Length is not part of the rule. The only test is
+which count is highest right now — 7 beat 5.
+
+> **After round 2** — vocab 10 tokens, corpus 30 tokens.
+
+**Round 3.** Words are `lo w`, `lo g`, `h er`, `p er`.
+
+| Pair | Count |
+|------|-------|
+| `lo w` | 5 |
+| `h er` | 4 |
+| `lo g` | 3 |
+| `p er` | 3 |
+
+Merge `lo w` -> `low`.
+
+> **After round 3** — vocab 11 tokens, corpus 25 tokens.
+
+**Round 4.**
+
+| Pair | Count |
+|------|-------|
+| `h er` | 4 |
+| `lo g` | 3 |
+| `p er` | 3 |
+
+Merge `h er` -> `her`. A merged token can merge again — `er` is one symbol now,
+so `h` + `er` is a normal pair.
+
+> **After round 4** — vocab 12 tokens, corpus 21 tokens.
+
+**Round 5.** Now a tie at the top.
+
+| Pair | Count |
+|------|-------|
+| `lo g` | 3 |
+| `p er` | 3 |
+
+There is no correct choice between the two. Any tie-break gives a working
+tokenizer. The only hard requirement is that it is **deterministic** — the same
+corpus must always produce the same merge list, or encoding and decoding will
+not match.
+
+| Tie-break rule | Used by |
+|------|---------|
+| Smallest pair in lexicographic order | `subword-nmt` (original BPE paper code) |
+| First pair seen in iteration order | HuggingFace `tokenizers` |
+
+Never break ties randomly. Never break ties on dictionary order alone if your
+dictionary is unordered — Python `dict` order depends on insertion, so a
+different corpus reading order would silently change the vocabulary.
+
+Taking lexicographic order, `lo g` wins. Merge it into `log`.
+
+> **After round 5** — vocab 13 tokens, corpus 18 tokens.
+
+Vocabulary hit the target of 13. Stop. `p er` never got merged.
+
+#### What training produced
+
+The merge list from step 4, all 5 rounds:
+
+```text
+1. l  + o  -> lo    (2 chars)
+2. e  + r  -> er    (2 chars)
+3. lo + w  -> low   (3 chars)
+4. h  + er -> her   (3 chars)
+5. lo + g  -> log   (3 chars)
+```
+
+The corpus is now:
+
+```text
+low    x5   1 token
+log    x3   1 token
+her    x4   1 token
+p er   x3   2 tokens
+```
+
+The two numbers moved together the whole way:
+
+| Round | Merge | Vocab | Corpus tokens |
+|-------|-------|-------|---------------|
+| — | base: `e g h l o p r w` | 8 | 45 |
+| 1 | `lo` | 9 | 37 |
+| 2 | `er` | 10 | 30 |
+| 3 | `low` | 11 | 25 |
+| 4 | `her` | 12 | 21 |
+| 5 | `log` | 13 | 18 |
+
+One merge adds exactly one token, so the final size is predictable:
+
+$$
+V = |{\text{base characters}}| + (\text{number of merges}) = 8 + 5 = 13
+$$
+
+That is the trade. Each merge costs one vocabulary slot and buys shorter
+sequences. The three most frequent words collapsed to one token each. `per`, the
+rarest, ran out of budget and stayed split as `p` + `er` — it never earned a
+slot of its own.
+
+Two things this example shows about merge order:
+
+- **Length never enters the rule.** `er` is 2 characters and merged at round 2.
+  `low` is 3 characters and merged at round 3. Not because one is shorter, but
+  because 7 beat 5 at that moment. BPE compares counts and nothing else.
+- **A pair keeps its count when merges happen elsewhere.** `e r` held 7 through
+  round 1 because that merge was inside `low` and `log`, which contain no `e`
+  or `r`. A count only drops when a merge eats one of the pair's own symbols.
+
+Real training stops at a target $V$ (32k, 128k, 200k), exactly like the target
+of 13 above. The merges you can afford go to whatever is most frequent, which is
+why common words and code patterns become single tokens and rare words stay
+split.
+
+At encode time there are no ties. Each merge has a fixed rank from training, so
+you always apply the lowest-rank merge available:
+
+```python
+pair = min(pairs, key=lambda p: merge_ranks.get(p, float("inf")))
+```
+
+Training produces two files:
+
+- **vocab**: token string -> ID
+- **merges**: the ordered list of merge rules
+
+Encoding replays the merges in the same order on new text. Order matters. A
+merge learned early must be applied early, or you get different tokens.
+
+Complexity:
+
+| Step | Cost |
+|------|------|
+| Train (naive) | $O(N \cdot M)$ for $N$ symbols, $M$ merges |
+| Encode one word | $O(k^2)$ naive, $O(k \log k)$ with a heap |
+
+The problem: plain BPE works on Unicode characters. Unicode has ~150,000
+characters. You cannot put them all in the base vocabulary. Anything left out
+becomes `<UNK>`, and `<UNK>` is unrecoverable — you cannot decode back to the
+original text.
+
+### Byte-level BPE
+
+Byte-level BPE fixes this. Run BPE on **raw UTF-8 bytes** instead of characters.
+
+The base vocabulary is exactly 256 tokens: byte `0` through byte `255`. Every
+possible string is a sequence of bytes, so:
+
+- No `<UNK>` token, ever.
+- Encode then decode always returns the original text.
+- Emoji, Chinese, code, binary garbage all work.
+
+#### The same example, on bytes
+
+Take the corpus from above. Step 1 splits into bytes instead of characters:
+
+```text
+6c 6f 77   x5    (low)
+6c 6f 67   x3    (log)
+68 65 72   x4    (her)
+70 65 72   x3    (per)
+```
+
+Nothing else changes. Round 1 still counts `6c 6f` at 8 and merges it. The
+algorithm is identical — only the starting symbols differ.
+
+For plain ASCII, one character is one byte, so you get exactly the same 5
+merges. The base vocabulary is the difference: 256 fixed byte tokens instead of
+the 8 characters this corpus happened to contain. So the final size is
+$256 + 5 = 261$.
+
+That fixed base is the whole point. Swap `per` for `pér`:
+
+```text
+70 c3 a9 72   x3    (pér)
+```
+
+Character-level BPE has to ask whether `é` is in the vocabulary. If not,
+`<UNK>`, and the text is unrecoverable. Byte-level BPE never asks — `c3` and
+`a9` are already there, like every other byte.
+
+The cost is length. `pér` starts as 4 symbols, not 3. A Chinese character is 3
+bytes, an emoji is 4. Merges fix most of this during training, since frequent
+multi-byte sequences become single tokens — but only for languages that appear
+often enough in the training corpus to earn merges.
+
+One detail: GPT-2 maps the 256 bytes to printable Unicode characters before
+running BPE. Space (byte 32) becomes `Ġ`, newline becomes `Ċ`. This is only so
+the vocab and merges files stay readable text — no invisible or control bytes in
+them. It does not change the algorithm.
+
+This is why the vocab lists `Ġlow` rather than `" low"`, and why `"cat"` and
+`" cat"` are separate token IDs. See the pre-tokenization note above.
+
+It also explains a familiar artifact: `é` is bytes `c3 a9`, which map to `Ã` and
+`©`. A vocab file full of `Ã©` is not a bug — it is UTF-8 bytes shown one at a
+time.
+
+### What models use today
+
+Byte-level BPE is the default everywhere.
+
+| Model | Tokenizer |
+|-------|-----------|
+| GPT-2/3/4, o-series | byte-level BPE (`tiktoken`) |
+| Llama 3, Qwen 2.5/3 | byte-level BPE |
+| DeepSeek, GLM, Kimi | byte-level BPE |
+| Llama 1/2, Mistral | SentencePiece BPE |
+| BERT | WordPiece |
+| T5, ALBERT | SentencePiece Unigram |
+
+Vocabulary sizes grew over time: 32k (Llama 2) -> 128k (Llama 3) -> ~150k-200k
+(GPT-4o, DeepSeek, GLM, Kimi). Bigger vocab compresses non-English text and code
+into fewer tokens, which cuts sequence length and inference cost.
+
+The trade-off is the embedding matrix. It is $V \times d_{\text{model}}$, so
+doubling $V$ doubles that matrix and the output projection with it.
+
+### BPE vs WordPiece vs Unigram
+
+All three make subwords. They differ in how they pick merges.
+
+| Method | Rule for picking |
+|--------|------------------|
+| BPE | Merge the most frequent pair |
+| WordPiece | Merge the pair that most increases corpus likelihood |
+| Unigram | Start with a big vocab, drop tokens that hurt likelihood least |
+
+WordPiece scores a pair by $\frac{\text{count}(xy)}{\text{count}(x)\,\text{count}(y)}$
+instead of raw count. This favors pairs that really belong together over pairs
+that are just both common.
+
+BPE won because it is simple, fast, and byte-level BPE removes `<UNK>` entirely.

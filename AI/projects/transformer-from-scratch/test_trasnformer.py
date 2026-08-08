@@ -10,7 +10,7 @@ Run:
 import torch
 import pytest
 
-from trasnformer import Embedding
+from transformer import Embedding
 
 
 # ---------------------------------------------------------------------------
