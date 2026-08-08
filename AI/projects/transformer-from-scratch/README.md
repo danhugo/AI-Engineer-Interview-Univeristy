@@ -853,6 +853,16 @@ decode.
 Here both were ~0.5, so the decoder was fine and the model was data-starved.
 Check this before tuning anything.
 
+Raising the toy corpus from 2,000 to 20,000 examples confirmed it:
+
+| Corpus | Steps | Val loss | Perplexity | Samples |
+|---|---|---|---|---|
+| 2,000 | 1,860 | 1.14 | 3.29 | right digits, wrong order |
+| 20,000 | 9,375 | 0.13 | 1.14 | exact, including 10 digits |
+
+Same code, same hyperparameters. The only change was more data and enough
+steps to get past warmup.
+
 ## Running it
 
 ```bash
