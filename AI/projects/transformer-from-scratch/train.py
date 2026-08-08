@@ -307,8 +307,12 @@ def report_bleu(model, dataset, tokenizer, device, cfg, limit: int = 500) -> Non
     model.eval()
     candidates, references = [], []
 
-    for start in range(0, min(limit, len(dataset)), cfg.batch_size):
-        pairs = [dataset[i] for i in range(start, min(start + cfg.batch_size, limit))]
+    # clamp once: the inner slice must never run past the dataset, only past
+    # the limit. Using `limit` alone here would IndexError on a small split.
+    n = min(limit, len(dataset))
+
+    for start in range(0, n, cfg.batch_size):
+        pairs = [dataset[i] for i in range(start, min(start + cfg.batch_size, n))]
         src = pad_to_max([p[0] for p in pairs]).to(device)
         outputs = greedy_decode(model, src, max_len=cfg.max_len, device=device)
 
