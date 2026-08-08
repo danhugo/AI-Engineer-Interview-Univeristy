@@ -947,6 +947,62 @@ tgt: mean 16.3  p50 15  p90 22  p99 31  max 50
 sentences intact and made the run 13x faster. The toy task never exposed any of
 this because its vocabulary is 14 tokens, so its logits were negligible.
 
+## Results
+
+Both tasks, on an M-series laptop (MPS).
+
+### Toy task — reverse a digit sequence
+
+20,000 examples, `d_model=128`, 2+2 layers, 30 epochs, 426s.
+
+| Metric | Value |
+|---|---|
+| Val loss | 0.13 |
+| Perplexity | 1.14 |
+| Samples | exact, including 10-digit sequences |
+
+### Multi30k de→en
+
+29,000 sentence pairs, 8k shared byte-level BPE, `d_model=256`, 3+3 layers,
+`batch=64`, `max_len=32`, 20 epochs, 2986s.
+
+| Epoch | 1 | 5 | 10 | 14 | 18 | 20 |
+|---|---|---|---|---|---|---|
+| Perplexity | 72.1 | 13.6 | 9.0 | 7.9 | **7.81** | 7.82 |
+
+Best val loss 2.055 at epoch 18. Val loss flattens around epoch 14 and wobbles
+slightly after — mild overfitting, which is expected with only 29k pairs.
+
+BLEU on the full 1014-sentence validation split:
+
+| Metric | Score |
+|---|---|
+| `sacrebleu` (13a tokenization, the standard) | **29.93** |
+| `metrics.py` `corpus_bleu` (whitespace) | 27.76 |
+
+**These two numbers are not the same measurement.** sacrebleu applies `13a`
+tokenization, which splits punctuation off from words; the from-scratch version
+splits on whitespace and leaves `dog.` as one token. Always say which one a
+BLEU number came from — comparing across tokenizations is meaningless, and the
+gap here is 2.2 points on identical output.
+
+Sample translations:
+
+```text
+got   A man sleeping on a green sofa in a room.
+want  A man sleeping in a green room on a couch.
+
+got   A boy is sitting on a shoulders with headphones.
+want  A boy wearing headphones sits on a woman's shoulders.
+
+got   A group of men loading a truck on unloadm motor scooter
+want  A group of men are loading cotton onto a truck
+```
+
+The characteristic failure of a small model: content words are right, agreement
+and rare words are not. `a shoulders` drops the possessive, `unloadm` is not a
+word. The meaning survives; the grammar does not always.
+
 ## Running it
 
 ```bash
