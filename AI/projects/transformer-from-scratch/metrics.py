@@ -1,6 +1,6 @@
 """BLEU and perplexity from scratch. STUDY ONLY.
 
-The real pipeline uses sacrebleu. test_metrics.py asserts this matches it.
+The real pipeline uses  . test_metrics.py asserts this matches it.
 
 Perplexity
 ----------

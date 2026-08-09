@@ -13,11 +13,7 @@ The overfit gate
 ----------------
 --overfit trains on a single batch and expects the loss to reach ~0. It is the
 highest-value test in the file. A model that cannot memorize one batch has a
-bug, not a tuning problem, and the three usual causes all show up here:
-
-  - target shift wrong  -> loss plateaus well above zero
-  - causal mask wrong   -> loss drops suspiciously fast, generation is garbage
-  - pad handling wrong  -> loss drops but decode emits <pad>
+bug, not a tuning problem.
 
 Run it before every real training run. It takes seconds.
 """
