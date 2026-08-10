@@ -1,0 +1,21 @@
+{
+  "task": "multi30k",
+  "epochs": 20,
+  "batch_size": 64,
+  "max_len": 32,
+  "vocab_size": 8000,
+
+  "d_model": 256,
+  "d_ff": 1024,
+  "heads": 8,
+  "layers": 3,
+  "dropout": 0.1,
+
+  "warmup": 1500,
+  "weight_decay": 0.01,
+  "label_smoothing": 0.1,
+  "clip": 1.0,
+
+  "seed": 0,
+  "log_every": 200
+}

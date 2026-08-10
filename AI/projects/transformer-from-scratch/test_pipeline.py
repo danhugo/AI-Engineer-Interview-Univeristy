@@ -233,3 +233,70 @@ class TestCheckpoint:
         load_checkpoint(path, restored, new_opt, new_sched)
 
         assert len(new_opt.state_dict()["state"]) > 0
+
+
+class TestConfigFiles:
+    """Settings resolve as defaults -> config file -> CLI flags."""
+
+    def _write(self, tmp_path, data):
+        import json
+        p = tmp_path / "c.json"
+        p.write_text(json.dumps(data))
+        return str(p)
+
+    def test_file_overrides_defaults(self, tmp_path):
+        from train import parse_args
+        cfg = parse_args(["--config", self._write(tmp_path, {"d_model": 512})])
+        assert cfg.d_model == 512
+
+    def test_cli_overrides_file(self, tmp_path):
+        """The whole point of precedence: tweak one knob without editing JSON."""
+        from train import parse_args
+        path = self._write(tmp_path, {"d_model": 512, "epochs": 20})
+        cfg = parse_args(["--config", path, "--epochs", "3"])
+        assert cfg.epochs == 3      # CLI wins
+        assert cfg.d_model == 512   # file still applies
+
+    def test_file_value_survives_matching_default(self, tmp_path):
+        """A file value equal to a default must not be mistaken for 'typed'."""
+        from train import parse_args
+        cfg = parse_args([
+            "--config", self._write(tmp_path, {"task": "multi30k", "warmup": 400})
+        ])
+        # 400 is the toy default; the file asked for it on multi30k, so the
+        # task-based default of 4000 must not overwrite it
+        assert cfg.warmup == 400
+
+    def test_unknown_key_is_rejected(self, tmp_path):
+        """A typo'd key must fail loudly, not be silently dropped."""
+        from train import parse_args
+        with pytest.raises(SystemExit):
+            parse_args(["--config", self._write(tmp_path, {"d_modell": 512})])
+
+    def test_missing_file_is_rejected(self):
+        from train import parse_args
+        with pytest.raises(SystemExit):
+            parse_args(["--config", "does_not_exist.json"])
+
+    def test_shipped_configs_are_valid(self):
+        """configs/*.json must actually load."""
+        from pathlib import Path
+        from train import parse_args
+        for name in ("toy", "multi30k"):
+            path = Path(__file__).parent / "configs" / f"{name}.json"
+            assert path.exists(), f"missing {path}"
+            cfg = parse_args(["--config", str(path)])
+            assert cfg.task == name
+
+    def test_saved_config_round_trips(self, tmp_path):
+        """A written config must be re-runnable with --config."""
+        from train import parse_args, save_resolved_config
+        original = parse_args(["--task", "multi30k", "--epochs", "7"])
+        out = tmp_path / "config.json"
+        save_resolved_config(original, out)
+
+        reloaded = parse_args(["--config", str(out)])
+        # `config` itself is provenance, not a setting: the original was run
+        # without a file, the reload was not. Every real setting must match.
+        drop = lambda c: {k: v for k, v in vars(c).items() if k != "config"}
+        assert drop(reloaded) == drop(original)

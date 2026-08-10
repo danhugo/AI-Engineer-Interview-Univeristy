@@ -1,0 +1,21 @@
+{
+  "task": "toy",
+  "epochs": 30,
+  "batch_size": 64,
+  "train_samples": 20000,
+  "max_len": 64,
+
+  "d_model": 128,
+  "d_ff": 512,
+  "heads": 4,
+  "layers": 2,
+  "dropout": 0.1,
+
+  "warmup": 400,
+  "weight_decay": 0.01,
+  "label_smoothing": 0.1,
+  "clip": 1.0,
+
+  "seed": 0,
+  "log_every": 500
+}

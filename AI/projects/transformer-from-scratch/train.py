@@ -18,7 +18,7 @@ bug, not a tuning problem.
 Run it before every real training run. It takes seconds.
 """
 import argparse
-import math
+import json
 import time
 from pathlib import Path
 
@@ -108,11 +108,10 @@ def run_overfit_gate(model, batch, cfg, device) -> bool:
 
     Two things are deliberately off:
 
-    - Label smoothing. It puts a floor under the loss, since you cannot reach
-      0 when the target is not one-hot.
-    - Dropout. It injects noise on every forward pass specifically to prevent
-      memorization, which is the exact thing being measured here. With dropout
-      at 0.1 this gate stalls around 0.7 and reports a bug that does not exist.
+    - Label smoothing: converts hard one hot targets [0,1,0,0] into soft probabilities 
+      [0.033, 0.9, 0.033, 0.033]. 
+      Turn off since you cannot reach 0 when the target is not one-hot.
+    - Dropout.
 
     Both are set by the caller before the model is built.
     """
@@ -214,6 +213,8 @@ def train(cfg: argparse.Namespace) -> None:
     step = 0
     best_val = float("inf")
     ckpt_dir = Path(cfg.out) / cfg.task
+    save_resolved_config(cfg, ckpt_dir / "config.json")
+    print(f"config: {ckpt_dir / 'config.json'}")
     start = time.time()
 
     for epoch in range(1, cfg.epochs + 1):
@@ -324,8 +325,9 @@ def report_bleu(model, dataset, tokenizer, device, cfg, limit: int = 500) -> Non
         print(f"  want {' '.join(references[i])}")
 
 
-def parse_args() -> argparse.Namespace:
+def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--config", help="JSON file of settings; CLI flags override it")
     p.add_argument("--task", choices=["toy", "multi30k"], default="toy")
     p.add_argument("--overfit", action="store_true", help="run the one-batch gate")
     p.add_argument("--overfit-steps", type=int, default=400)
@@ -352,8 +354,47 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--device", default="auto")
     p.add_argument("--out", default="checkpoints")
     p.add_argument("--log-every", type=int, default=50)
+    return p
 
-    cfg = p.parse_args()
+
+def explicit_cli_args(argv: list[str] | None = None) -> dict:
+    """Which settings the user actually typed, ignoring defaults.
+
+    Needed for precedence. A normal parse cannot tell `--epochs 10` (typed)
+    from `epochs=10` (the default), so a config file would either always win
+    or never win. Re-parsing with SUPPRESS defaults leaves only what was
+    given on the command line.
+    """
+    stripped = build_parser()
+    for action in stripped._actions:
+        action.default = argparse.SUPPRESS
+    return vars(stripped.parse_args(argv))
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Resolve settings from defaults, then config file, then CLI flags."""
+    parser = build_parser()
+    cfg = vars(parser.parse_args(argv))
+    typed = explicit_cli_args(argv)
+
+    config_path = typed.get("config") or cfg.get("config")
+    if config_path:
+        path = Path(config_path)
+        if not path.exists():
+            parser.error(f"config file not found: {path}")
+        loaded = json.loads(path.read_text())
+
+        unknown = set(loaded) - set(cfg)
+        if unknown:
+            # a typo'd key would otherwise be silently ignored, and you would
+            # spend the run wondering why the setting did nothing
+            parser.error(f"unknown keys in {path}: {sorted(unknown)}")
+
+        cfg.update(loaded)
+
+    # CLI wins over the file, so a saved config stays a starting point
+    cfg.update(typed)
+    cfg = argparse.Namespace(**cfg)
 
     if cfg.warmup is None:
         # Warmup is counted in steps, not epochs. Multi30k does ~450 steps per
@@ -362,8 +403,22 @@ def parse_args() -> argparse.Namespace:
         cfg.warmup = 4000 if cfg.task == "multi30k" else 400
 
     if cfg.warmup <= 0:
-        p.error("--warmup must be positive")
+        parser.error("--warmup must be positive")
     return cfg
+
+
+def save_resolved_config(cfg: argparse.Namespace, path: Path) -> None:
+    """Write the settings this run actually used, next to its checkpoints.
+
+    The checkpoint already carries a copy, but that needs torch to read. A
+    plain JSON file can be diffed, and re-run with --config directly.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # drop `config`: it records where settings were read from, not a setting.
+    # Writing it would bake a stale path into the file and make a saved config
+    # differ from the run it describes.
+    settings = {k: v for k, v in vars(cfg).items() if k != "config"}
+    path.write_text(json.dumps(settings, indent=2, sort_keys=True) + "\n")
 
 
 if __name__ == "__main__":

@@ -1005,11 +1005,42 @@ word. The meaning survives; the grammar does not always.
 
 ## Running it
 
-```bash
-python train.py --task toy --overfit      # correctness gate, seconds
-python train.py --task toy                # synthetic reversal
-python train.py --task multi30k           # real de->en translation
+Settings live in `configs/*.json`, which record exactly what produced the
+results above:
 
+```bash
+python train.py --config configs/toy.json        # val loss 0.13
+python train.py --config configs/multi30k.json   # BLEU 29.93
+
+python train.py --task toy --overfit             # correctness gate, seconds
+```
+
+Precedence is **defaults -> config file -> CLI flags**, so you can vary one
+knob without editing JSON:
+
+```bash
+python train.py --config configs/multi30k.json --epochs 5 --d-model 512
+```
+
+Every run writes its resolved settings to `checkpoints/<task>/config.json`.
+That file is itself a valid `--config` input, so any past run can be relaunched
+exactly:
+
+```bash
+python train.py --config checkpoints/multi30k/config.json
+```
+
+Two deliberate choices there. An unknown key in a config file is a hard error
+rather than a silent no-op — a typo'd `d_modell` would otherwise cost you a
+full training run before you noticed. And the saved file omits the `config`
+key itself, since that records where settings came from rather than being a
+setting; writing it would bake in a stale path.
+
+Tests:
+
+```bash
+python -m pytest                          # all 85
 python -m pytest test_study_modules.py    # from-scratch vs library
-python -m pytest test_pipeline.py         # collate, data, checkpoints
+python -m pytest test_pipeline.py         # collate, data, checkpoints, config
+python -m pytest test_seq2seq_data.py     # tokenizer and Multi30k
 ```
