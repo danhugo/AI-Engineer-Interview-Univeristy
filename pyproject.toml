@@ -4,12 +4,14 @@ version = "0.1.0"
 description = "Transformer implemented from scratch, for interview study."
 requires-python = ">=3.11"
 dependencies = [
+    "tokenizers>=0.23.1",
     "torch",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "sacrebleu>=2.6.0",
 ]
 
 # Discover transformer tests from the repo root.

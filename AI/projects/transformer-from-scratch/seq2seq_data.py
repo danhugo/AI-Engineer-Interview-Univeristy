@@ -73,10 +73,7 @@ def train_tokenizer(
     """
     from tokenizers import Tokenizer, decoders, models, pre_tokenizers, trainers
 
-    # No unk_token. Setting one makes this character-level BPE with a fallback:
-    # any character absent from the training corpus becomes <unk> and the text
-    # can no longer be decoded back. Byte-level BPE has no such case, so the
-    # fallback should be unreachable — and declaring it hides the bug below.
+    # No unk_token. With byte-level BPE, every character can be represented..
     tokenizer = Tokenizer(models.BPE())
 
     # ByteLevel with add_prefix_space so a leading word is tokenized the same
