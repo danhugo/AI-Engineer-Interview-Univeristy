@@ -73,21 +73,20 @@ def train_tokenizer(
     """
     from tokenizers import Tokenizer, decoders, models, pre_tokenizers, trainers
 
-    # No unk_token. With byte-level BPE, every character can be represented..
+    # No unk_token. With byte-level BPE, every character can be represented.
+    # Adding <unk> can hide tokenizer bugs and make some text impossible to decode correctly.
     tokenizer = Tokenizer(models.BPE())
 
-    # ByteLevel with add_prefix_space so a leading word is tokenized the same
-    # whether or not it starts the sentence
+    # add_prefix_space makes the first word tokenize the same as words after a space.
+    # "hello word" is treated like " hello world"
     tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=True)
-    tokenizer.decoder = decoders.ByteLevel()
+    tokenizer.decoder = decoders.ByteLevel() # covert byte-level tokenizer back to normal word
 
     trainer = trainers.BpeTrainer(
         vocab_size=vocab_size,
         special_tokens=SPECIAL_TOKENS,  # order fixes the IDs at 0,1,2,3
-        # The 256 byte tokens must be seeded explicitly. Without this the base
-        # vocabulary is only the characters that appeared in training, so an
-        # unseen byte has nothing to fall back to. This one argument is the
-        # difference between byte-level and character-level BPE.
+        # Add all 256 byte tokens so unseen characters can still be encoded.
+        # This makes it true byte-level BPE.
         initial_alphabet=pre_tokenizers.ByteLevel.alphabet(),
         show_progress=False,
     )
