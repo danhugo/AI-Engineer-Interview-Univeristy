@@ -76,3 +76,17 @@ Paged KV cache, tensor parallelism, and CUDA graphs are all supposed to be
 - Use **top-k agreement** for the bf16 path, not logit diffs.
 - If a bf16 gap appears at only a couple of positions, check whether they are
   massive-activation tokens before assuming a bug.
+
+## flash-attn constraint: paged block size must be a multiple of 256
+
+`flash_attn_with_kvcache(..., block_table=...)` raises
+
+```
+RuntimeError: Paged KV cache block size must be divisible by 256
+```
+
+for anything smaller. This is why nano-vllm uses `block_size=256`.
+
+Consequence for testing: you cannot use tiny blocks to force block-boundary
+crossings. Use a long prompt instead — `test_stage2.py` uses 600 tokens so the
+sequence spans 3 blocks.

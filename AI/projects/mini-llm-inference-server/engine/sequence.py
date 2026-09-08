@@ -1,0 +1,60 @@
+"""One request in flight."""
+
+from enum import Enum, auto
+
+
+class SequenceStatus(Enum):
+    WAITING = auto()   # queued, no blocks yet
+    RUNNING = auto()   # has blocks, generating
+    FINISHED = auto()  # hit EOS or the token limit
+
+
+class Sequence:
+    """Token ids plus the KV-cache blocks holding this sequence's K/V.
+
+    block_table maps logical block index -> physical block id. Logical block i
+    covers tokens [i*block_size, (i+1)*block_size). The blocks need not be
+    contiguous in memory — that is the whole point of paging.
+    """
+
+    counter = 0
+
+    def __init__(self, prompt_token_ids: list[int], max_new_tokens: int = 64,
+                 eos_token_id: int | None = None):
+        self.seq_id = Sequence.counter
+        Sequence.counter += 1
+
+        self.prompt_len = len(prompt_token_ids)
+        self.token_ids = list(prompt_token_ids)
+        self.max_new_tokens = max_new_tokens
+        self.eos_token_id = eos_token_id
+
+        self.status = SequenceStatus.WAITING
+        self.block_table: list[int] = []
+        # Tokens whose K/V is already in the cache. Prefill writes prompt_len of
+        # them at once; each decode step adds one.
+        self.num_cached = 0
+
+    def __len__(self) -> int:
+        return len(self.token_ids)
+
+    @property
+    def num_new_tokens(self) -> int:
+        return len(self.token_ids) - self.prompt_len
+
+    @property
+    def last_token(self) -> int:
+        return self.token_ids[-1]
+
+    def append(self, token_id: int) -> None:
+        self.token_ids.append(token_id)
+        if token_id == self.eos_token_id or self.num_new_tokens >= self.max_new_tokens:
+            self.status = SequenceStatus.FINISHED
+
+    def num_blocks_needed(self, block_size: int) -> int:
+        return -(-len(self) // block_size)  # ceil
+
+    def __repr__(self) -> str:
+        return (f"Sequence(id={self.seq_id}, len={len(self)}, "
+                f"cached={self.num_cached}, blocks={self.block_table}, "
+                f"status={self.status.name})")

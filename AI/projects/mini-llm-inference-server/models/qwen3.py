@@ -23,6 +23,9 @@ try:
 except ImportError:  # pragma: no cover - depends on the machine
     flash_attn_func = None
 
+from layers.attention import paged_attend
+from utils.context import get_context
+
 
 def attend(q, k, v):
     """Causal grouped-query attention.
@@ -135,6 +138,10 @@ class Qwen3Attention(nn.Module):
         self.q_norm = RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = RMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
+        # Set by attach_kv_cache(). None means the stage-1 uncached path.
+        self.k_cache = None
+        self.v_cache = None
+
     def forward(self, hidden_states, cos, sin):
         b, s, _ = hidden_states.shape
         q = self.q_proj(hidden_states).view(b, s, self.num_heads, self.head_dim)
@@ -147,7 +154,11 @@ class Qwen3Attention(nn.Module):
         q, k = apply_rope(q, k, cos, sin)
 
         # Both backends default the softmax scale to 1/sqrt(head_dim), as we want.
-        o = attend(q, k, v)  # (b, s, num_heads, head_dim)
+        ctx = get_context()
+        if self.k_cache is not None and ctx.slot_mapping is not None:
+            o = paged_attend(q, k, v, self.k_cache, self.v_cache, ctx)
+        else:
+            o = attend(q, k, v)  # stage-1 path: no cache, recompute every step
         return self.o_proj(o.reshape(b, s, -1))
 
 
