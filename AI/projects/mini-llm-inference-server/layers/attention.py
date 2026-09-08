@@ -1,14 +1,16 @@
-"""Attention that reads and writes a paged KV cache.
+"""Attention over a paged KV cache, batched.
 
-Two paths, because prefill and decode are different shapes of problem:
+All tensors are flattened to (num_tokens, heads, head_dim) — no batch dim, no
+padding. Sequence boundaries come from cu_seqlens. Three paths:
 
-  prefill  the whole prompt arrives at once, so we hold every K/V for this
-           sequence in hand. Write them to the cache, then attend over them
-           directly — no need to read back through the block table.
-  decode   one new token. Its K/V goes into the cache, then we attend over
-           everything cached so far, reached through the block table.
+  prefill (paged)  many prompts of different lengths concatenated. Write every
+                   K/V to the cache, then one varlen kernel call attends within
+                   each sequence, using cu_seqlens to keep them separate.
+  decode (paged)   one new token per sequence. Write its K/V, then read the
+                   whole history back through each sequence's block table.
+  no cache         stage-1 path, single sequence, recompute everything.
 
-Stage 2 stores K/V with plain torch indexing. A Triton kernel replaces that
+Stage 3 stores K/V with plain torch indexing. A Triton kernel replaces that
 later; correctness first.
 """
 
@@ -17,9 +19,13 @@ import torch
 from utils.context import Context
 
 try:
-    from flash_attn import flash_attn_func, flash_attn_with_kvcache
+    from flash_attn import (
+        flash_attn_func,
+        flash_attn_varlen_func,
+        flash_attn_with_kvcache,
+    )
 except ImportError:  # pragma: no cover - depends on the machine
-    flash_attn_func = flash_attn_with_kvcache = None
+    flash_attn_func = flash_attn_varlen_func = flash_attn_with_kvcache = None
 
 
 def store_kv(k: torch.Tensor, v: torch.Tensor,
@@ -39,22 +45,46 @@ def store_kv(k: torch.Tensor, v: torch.Tensor,
     v_cache.view(-1, num_heads, head_dim)[slot_mapping] = v
 
 
-def paged_attend(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor,
-                 k_cache: torch.Tensor, v_cache: torch.Tensor,
-                 ctx: Context) -> torch.Tensor:
-    """Causal GQA against the paged cache. q/k/v are (batch, seq, heads, dim)."""
-    b, s = q.shape[:2]
-    store_kv(k.reshape(-1, *k.shape[-2:]), v.reshape(-1, *v.shape[-2:]),
-             k_cache, v_cache, ctx.slot_mapping)
+def attend(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor,
+           k_cache: torch.Tensor | None, v_cache: torch.Tensor | None,
+           ctx: Context) -> torch.Tensor:
+    """Causal GQA. q/k/v are (num_tokens, heads, head_dim); returns the same."""
+    if k_cache is None or not ctx.active:
+        # Stage-1 path: one sequence, no cache. flash_attn_func wants a batch
+        # dim; SDPA covers fp32 and machines without flash-attn.
+        return _uncached(q, k, v)
+
+    store_kv(k, v, k_cache, v_cache, ctx.slot_mapping)
 
     if ctx.is_prefill:
-        # Every K/V this sequence needs was computed in this same call.
-        return flash_attn_func(q, k, v, causal=True)
+        # Every K/V needed this step was just computed. cu_seqlens keeps the
+        # concatenated sequences from attending across each other.
+        return flash_attn_varlen_func(
+            q, k, v,
+            cu_seqlens_q=ctx.cu_seqlens_q,
+            cu_seqlens_k=ctx.cu_seqlens_k,
+            max_seqlen_q=ctx.max_seqlen_q,
+            max_seqlen_k=ctx.max_seqlen_k,
+            causal=True,
+        )
 
-    # Decode: read the whole history back out of the blocks.
-    return flash_attn_with_kvcache(
-        q, k_cache, v_cache,
+    # Decode: one query token per sequence, history read via the block table.
+    o = flash_attn_with_kvcache(
+        q.unsqueeze(1),  # (batch, seqlen_q=1, heads, dim)
+        k_cache, v_cache,
         cache_seqlens=ctx.cache_seqlens,
         block_table=ctx.block_table,
         causal=True,
     )
+    return o.squeeze(1)
+
+
+def _uncached(q, k, v):
+    if flash_attn_func is not None and q.dtype in (torch.float16, torch.bfloat16):
+        return flash_attn_func(q.unsqueeze(0), k.unsqueeze(0), v.unsqueeze(0),
+                               causal=True).squeeze(0)
+    # SDPA wants (batch, heads, seq, dim); enable_gqa broadcasts the kv heads.
+    qs, ks, vs = (t.unsqueeze(0).transpose(1, 2) for t in (q, k, v))
+    o = torch.nn.functional.scaled_dot_product_attention(
+        qs, ks, vs, is_causal=True, enable_gqa=True)
+    return o.transpose(1, 2).squeeze(0)

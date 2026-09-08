@@ -16,32 +16,8 @@ import torch.nn.functional as F
 from torch import nn
 from transformers import Qwen3Config
 
-# flash-attn needs a CUDA GPU and fp16/bf16 tensors. Import is optional so this
-# file still runs on a Mac or a pre-Ampere GPU via the SDPA fallback.
-try:
-    from flash_attn import flash_attn_func
-except ImportError:  # pragma: no cover - depends on the machine
-    flash_attn_func = None
-
-from layers.attention import paged_attend
+from layers.attention import attend
 from utils.context import get_context
-
-
-def attend(q, k, v):
-    """Causal grouped-query attention.
-
-    Uses flash-attn when it can (fp16/bf16 on CUDA), else torch SDPA. SDPA is
-    needed for fp32 — flash-attn rejects it — which is how we verify that a
-    bf16 mismatch is precision and not a bug.
-    """
-    if flash_attn_func is not None and q.dtype in (torch.float16, torch.bfloat16):
-        # flash-attn takes (batch, seq, heads, dim) and handles GQA natively.
-        return flash_attn_func(q, k, v, causal=True)
-
-    # SDPA wants (batch, heads, seq, dim); enable_gqa broadcasts the kv heads.
-    q, k, v = (t.transpose(1, 2) for t in (q, k, v))
-    o = F.scaled_dot_product_attention(q, k, v, is_causal=True, enable_gqa=True)
-    return o.transpose(1, 2)
 
 
 def rope_theta(config: Qwen3Config) -> float:
@@ -86,13 +62,13 @@ def rotate_half(x: torch.Tensor) -> torch.Tensor:
 def apply_rope(q, k, cos, sin):
     """Apply rotary embeddings to q and k.
 
-    q, k: (batch, seq, heads, head_dim)
-    cos, sin: (seq, head_dim // 2), float32
+    q, k: (num_tokens, heads, head_dim)
+    cos, sin: (num_tokens, head_dim // 2), float32
     """
-    # Duplicate each freq so it lines up with the full head_dim, then broadcast
-    # over batch and heads: (1, seq, 1, head_dim).
-    cos = torch.cat([cos, cos], dim=-1)[None, :, None, :]
-    sin = torch.cat([sin, sin], dim=-1)[None, :, None, :]
+    # Duplicate each freq to cover the full head_dim, then add a head axis so it
+    # broadcasts over heads: (num_tokens, 1, head_dim).
+    cos = torch.cat([cos, cos], dim=-1).unsqueeze(1)
+    sin = torch.cat([sin, sin], dim=-1).unsqueeze(1)
     # Cast to q's dtype FIRST. cos/sin are float32 for precision, and bf16 * fp32
     # promotes the whole product to fp32 — which flash-attn rejects.
     cos, sin = cos.to(q.dtype), sin.to(q.dtype)
@@ -143,10 +119,11 @@ class Qwen3Attention(nn.Module):
         self.v_cache = None
 
     def forward(self, hidden_states, cos, sin):
-        b, s, _ = hidden_states.shape
-        q = self.q_proj(hidden_states).view(b, s, self.num_heads, self.head_dim)
-        k = self.k_proj(hidden_states).view(b, s, self.num_kv_heads, self.head_dim)
-        v = self.v_proj(hidden_states).view(b, s, self.num_kv_heads, self.head_dim)
+        # hidden_states: (num_tokens, hidden_size)
+        t = hidden_states.shape[0]
+        q = self.q_proj(hidden_states).view(t, self.num_heads, self.head_dim)
+        k = self.k_proj(hidden_states).view(t, self.num_kv_heads, self.head_dim)
+        v = self.v_proj(hidden_states).view(t, self.num_kv_heads, self.head_dim)
 
         # QK-Norm is applied per head, BEFORE RoPE (matches HF ordering).
         q = self.q_norm(q)
@@ -154,12 +131,8 @@ class Qwen3Attention(nn.Module):
         q, k = apply_rope(q, k, cos, sin)
 
         # Both backends default the softmax scale to 1/sqrt(head_dim), as we want.
-        ctx = get_context()
-        if self.k_cache is not None and ctx.slot_mapping is not None:
-            o = paged_attend(q, k, v, self.k_cache, self.v_cache, ctx)
-        else:
-            o = attend(q, k, v)  # stage-1 path: no cache, recompute every step
-        return self.o_proj(o.reshape(b, s, -1))
+        o = attend(q, k, v, self.k_cache, self.v_cache, get_context())
+        return self.o_proj(o.reshape(t, -1))
 
 
 class Qwen3MLP(nn.Module):
@@ -213,7 +186,7 @@ class Qwen3Model(nn.Module):
         )
 
     def forward(self, input_ids, positions):
-        # input_ids: (batch, seq)   positions: (seq,)
+        # input_ids, positions: (num_tokens,)
         hidden_states = self.embed_tokens(input_ids)
         cos, sin = self.rotary_emb(positions)
         for layer in self.layers:
@@ -232,6 +205,29 @@ class Qwen3ForCausalLM(nn.Module):
         if config.tie_word_embeddings:
             self.lm_head.weight = self.model.embed_tokens.weight
 
-    def forward(self, input_ids, positions):
+    def forward(self, input_ids, positions, logits_indices=None):
+        """input_ids, positions: (num_tokens,). Returns (num_tokens, vocab).
+
+        A leading batch dim of 1 is accepted and restored, so the stage-1
+        scripts keep working. Real batches go through the flat layout with
+        cu_seqlens in the context — a batch dim cannot express sequences of
+        different lengths without padding.
+
+        logits_indices picks which rows to run the lm_head on. During prefill
+        only the last token of each sequence is needed, and the vocab is 152k
+        wide, so computing the rest is pure waste.
+        """
+        batched = input_ids.dim() == 2
+        if batched:
+            assert input_ids.shape[0] == 1, \
+                "2D input is only for single-sequence compatibility; " \
+                "batches must use the flat layout"
+            input_ids = input_ids.reshape(-1)
+        if positions.dim() == 2:
+            positions = positions.reshape(-1)
+
         hidden_states = self.model(input_ids, positions)
-        return self.lm_head(hidden_states)  # logits: (batch, seq, vocab)
+        if logits_indices is not None:
+            hidden_states = hidden_states[logits_indices]
+        logits = self.lm_head(hidden_states)
+        return logits.unsqueeze(0) if batched else logits

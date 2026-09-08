@@ -90,3 +90,35 @@ for anything smaller. This is why nano-vllm uses `block_size=256`.
 Consequence for testing: you cannot use tiny blocks to force block-boundary
 crossings. Use a long prompt instead — `test_stage2.py` uses 600 tokens so the
 sequence spans 3 blocks.
+
+## Do not test batching by comparing generated text
+
+Stage 3's first test compared batched generation against running each prompt
+alone, and one prompt out of six diverged. It was not a bug. `diag_batch.py`:
+
+```
+=== the decision at token 16 ===
+  context: 'anoi is the pho, a noodle soup with broth'
+      24.2500  ','      <- uncached, batch=6
+      24.2500  ' made'  <- batch=1
+  top-1 minus top-2 gap: 0.0000
+```
+
+Two tokens with **exactly** the same bf16 logit. `argmax` picks one
+arbitrarily, and changing the batch size changes reduction order inside the
+attention kernels — enough to flip the tie. From there the two texts are
+completely different, though neither is wrong.
+
+Two mistakes to avoid, both of which we made:
+
+1. **Using "each prompt alone" as ground truth.** It is not; it is just another
+   run. The only trusted reference is the uncached path, and even that only
+   agrees up to ties. Here batch=6 happened to match it and batch=1 did not.
+2. **Gating on the autoregressive trajectory.** One flipped tie at token 16
+   changes every token after it. The test measures chaos, not correctness.
+
+**Test the machinery instead.** Given the *same* token history, batching must
+produce the same logits. `test_stage3.py` prefills the batch, pins the first
+sampled token so both runs decode from an identical history, then compares
+logits per sequence. Observed spread: 0.14-0.38 against a 0.75 tolerance,
+for both prefill and decode.

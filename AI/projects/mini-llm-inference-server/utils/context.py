@@ -15,14 +15,34 @@ import torch
 
 @dataclass
 class Context:
-    # Prefill processes a whole prompt; decode does one token per sequence.
+    """Everything attention needs for one batched step.
+
+    Tokens are flattened: a prefill step carrying prompts of 5 and 3 tokens has
+    8 rows, and cu_seqlens [0, 5, 8] says where each sequence starts and ends.
+    That is how one kernel call serves sequences of different lengths without
+    padding, which is what makes continuous batching cheap.
+    """
+
+    # Prefill processes whole prompts; decode does one token per sequence.
     is_prefill: bool = False
-    # Flat KV-cache slot for each token in this step: block_id * block_size + offset.
+
+    # Flat KV-cache slot per token this step: block_id * block_size + offset.
     slot_mapping: torch.Tensor | None = None
-    # (batch, max_blocks_per_seq) physical block ids per sequence.
+
+    # Prefill only: cumulative sequence boundaries, length batch+1.
+    cu_seqlens_q: torch.Tensor | None = None
+    cu_seqlens_k: torch.Tensor | None = None
+    max_seqlen_q: int = 0
+    max_seqlen_k: int = 0
+
+    # Decode only: (batch, max_blocks) block ids, and (batch,) cached lengths.
     block_table: torch.Tensor | None = None
-    # (batch,) how many tokens each sequence has in the cache, including this step.
     cache_seqlens: torch.Tensor | None = None
+
+    @property
+    def active(self) -> bool:
+        """True when the paged path should be used at all."""
+        return self.slot_mapping is not None
 
 
 _context = Context()
