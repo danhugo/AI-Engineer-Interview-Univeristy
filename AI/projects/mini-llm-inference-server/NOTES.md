@@ -122,3 +122,35 @@ produce the same logits. `test_stage3.py` prefills the batch, pins the first
 sampled token so both runs decode from an identical history, then compares
 logits per sequence. Observed spread: 0.14-0.38 against a 0.75 tolerance,
 for both prefill and decode.
+
+## Prefix caching: publish a hash only after the K/V is written
+
+The obvious implementation registers a block's hash when the block is
+allocated. That is a race. Two sequences sharing a prefix can be admitted in
+the same prefill step: the first allocates and registers, the second looks up
+the hash, "hits", and skips computing those tokens — but the first has not run
+its forward pass yet, so the block still holds zeros. The second sequence then
+attends over an empty prefix and silently produces wrong output.
+
+Fix: `allocate()` records pending `(block_id, hash, tokens)` on the sequence,
+and `commit()` publishes them after the forward pass. Same-batch siblings miss
+and each computes its own copy; the next request hits. `test_stage4.py` asserts
+this directly — the cold batch must report **0** cached tokens even though all
+three prompts share 512 tokens.
+
+Second guard: confirm a hit by comparing the block's stored `token_ids`, not
+just the hash. A 64-bit collision would otherwise serve the wrong K/V.
+
+Measured on three prompts sharing a 512-token prefix:
+
+```
+[cold] cached tokens per seq: [0, 0, 0]        hit rate 0.0%
+[warm] cached tokens per seq: [512, 512, 512]  hit rate 49.4%
+  warm vs prefix-caching-off: max logit diff 0.125-0.234, top-1 identical
+```
+
+99% of prompt tokens needed no attention compute on the warm run.
+
+Note that only **full** blocks are cacheable — a partial trailing block can
+still grow, so its hash is not final. With `block_size=256`, prompts sharing
+fewer than 256 tokens get no benefit at all.

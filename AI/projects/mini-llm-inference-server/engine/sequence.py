@@ -31,9 +31,11 @@ class Sequence:
 
         self.status = SequenceStatus.WAITING
         self.block_table: list[int] = []
-        # Tokens whose K/V is already in the cache. Prefill writes prompt_len of
-        # them at once; each decode step adds one.
+        # Tokens whose K/V is already in the cache. A prefix-cache hit makes
+        # this non-zero before the sequence has ever run.
         self.num_cached = 0
+        # Block hashes waiting to be published once their K/V is written.
+        self.pending_hashes: list[tuple[int, int, list[int]]] = []
 
     def __len__(self) -> int:
         return len(self.token_ids)
@@ -58,3 +60,8 @@ class Sequence:
         return (f"Sequence(id={self.seq_id}, len={len(self)}, "
                 f"cached={self.num_cached}, blocks={self.block_table}, "
                 f"status={self.status.name})")
+
+    @property
+    def num_uncached(self) -> int:
+        """Tokens this sequence still has to run through the model."""
+        return len(self) - self.num_cached

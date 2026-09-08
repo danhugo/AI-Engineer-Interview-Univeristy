@@ -57,15 +57,19 @@ def attend(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor,
     store_kv(k, v, k_cache, v_cache, ctx.slot_mapping)
 
     if ctx.is_prefill:
-        # Every K/V needed this step was just computed. cu_seqlens keeps the
-        # concatenated sequences from attending across each other.
+        # Read K/V back out of the cache rather than using the k/v just
+        # computed. With prefix caching, part of the history was never
+        # recomputed this step and only exists in the blocks. cu_seqlens_q
+        # counts the new tokens, cu_seqlens_k the full history, and causal
+        # masking lines them up at the right end.
         return flash_attn_varlen_func(
-            q, k, v,
+            q, k_cache, v_cache,
             cu_seqlens_q=ctx.cu_seqlens_q,
             cu_seqlens_k=ctx.cu_seqlens_k,
             max_seqlen_q=ctx.max_seqlen_q,
             max_seqlen_k=ctx.max_seqlen_k,
             causal=True,
+            block_table=ctx.block_table,
         )
 
     # Decode: one query token per sequence, history read via the block table.

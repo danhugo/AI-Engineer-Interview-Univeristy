@@ -55,7 +55,9 @@ class Scheduler:
             seq.status = SequenceStatus.RUNNING
             self.running.append(seq)
             scheduled.append(seq)
-            num_tokens += len(seq)
+            # Charge the budget for work actually done: a prefix-cache hit
+            # means those tokens are never pushed through the model.
+            num_tokens += seq.num_uncached
 
         if scheduled:
             return scheduled, True

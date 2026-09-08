@@ -37,28 +37,45 @@ class LLMEngine:
         return torch.tensor(xs, dtype=torch.int32, device=self.device)
 
     def _prepare_prefill(self, seqs: list[Sequence]):
-        """Concatenate whole prompts; cu_seqlens marks the boundaries."""
-        input_ids, positions, slots, cu = [], [], [], [0]
-        for seq in seqs:
-            n = len(seq)
-            input_ids += seq.token_ids
-            positions += list(range(n))
-            slots += self.manager.slot_mapping(seq, 0, n)
-            cu.append(cu[-1] + n)
-            seq.num_cached = n
+        """Concatenate the tokens that still need computing.
 
-        cu_t = self._int32(cu)
+        With prefix caching a sequence may arrive with part of its history
+        already in the cache. Those tokens are skipped here — they are still
+        attended to, via the block table, but never recomputed. So there are
+        two sets of lengths: q over new tokens, k over the full history.
+        """
+        input_ids, positions, slots = [], [], []
+        cu_q, cu_k = [0], [0]
+        for seq in seqs:
+            n, start = len(seq), seq.num_cached
+            input_ids += seq.token_ids[start:]
+            positions += list(range(start, n))
+            slots += self.manager.slot_mapping(seq, start, n)
+            cu_q.append(cu_q[-1] + (n - start))
+            cu_k.append(cu_k[-1] + n)
+
         ctx = dict(
             is_prefill=True,
             slot_mapping=self._long(slots),
-            cu_seqlens_q=cu_t,
-            cu_seqlens_k=cu_t,
-            max_seqlen_q=max(len(s) for s in seqs),
+            cu_seqlens_q=self._int32(cu_q),
+            cu_seqlens_k=self._int32(cu_k),
+            max_seqlen_q=max(s.num_uncached for s in seqs),
             max_seqlen_k=max(len(s) for s in seqs),
+            block_table=self._block_table(seqs),
         )
         # Only the last token of each sequence predicts anything.
-        logits_indices = self._long([c - 1 for c in cu[1:]])
+        logits_indices = self._long([c - 1 for c in cu_q[1:]])
         return self._long(input_ids), self._long(positions), ctx, logits_indices
+
+    def _block_table(self, seqs: list[Sequence]) -> torch.Tensor:
+        """Pad the per-sequence block lists into a rectangle.
+
+        Padding is never read: cu_seqlens_k (prefill) and cache_seqlens
+        (decode) bound how far each sequence looks.
+        """
+        width = max(len(s.block_table) for s in seqs)
+        return self._int32([s.block_table + [0] * (width - len(s.block_table))
+                            for s in seqs])
 
     def _prepare_decode(self, seqs: list[Sequence]):
         """One token per sequence; history is reached via the block tables."""
@@ -69,17 +86,11 @@ class LLMEngine:
             positions.append(n - 1)
             slots += self.manager.slot_mapping(seq, n - 1, n)
             seqlens.append(n)
-            seq.num_cached = n
-
-        # Pad block tables to a rectangle. Padding is never read because
-        # cache_seqlens bounds how far each sequence looks.
-        width = max(len(s.block_table) for s in seqs)
-        table = [s.block_table + [0] * (width - len(s.block_table)) for s in seqs]
 
         ctx = dict(
             is_prefill=False,
             slot_mapping=self._long(slots),
-            block_table=self._int32(table),
+            block_table=self._block_table(seqs),
             cache_seqlens=self._int32(seqlens),
         )
         return self._long(input_ids), self._long(positions), ctx, None
@@ -99,9 +110,15 @@ class LLMEngine:
 
         set_context(**ctx)
         try:
-            return self.model(input_ids, positions, logits_indices)
+            logits = self.model(input_ids, positions, logits_indices)
         finally:
             reset_context()
+
+        # The K/V now exists, so any block that filled up is safe to share.
+        for seq in seqs:
+            seq.num_cached = len(seq)
+            self.manager.commit(seq)
+        return logits
 
     def run(self, seqs: list[Sequence], is_prefill: bool) -> list[int]:
         logits = self.forward_logits(seqs, is_prefill)
