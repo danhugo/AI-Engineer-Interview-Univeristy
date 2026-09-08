@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.DS_Store
+.pytest_cache/
+
+# Model weights and HF cache — never commit these
+hf/
+*.safetensors
+*.bin
+
+# Benchmark output
+bench/results/
+*.log
+
+# Local agent instructions
+CLAUDE.md
+AGENT.md
