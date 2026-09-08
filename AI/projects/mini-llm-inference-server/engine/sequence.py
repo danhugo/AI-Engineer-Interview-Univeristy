@@ -20,14 +20,27 @@ class Sequence:
     counter = 0
 
     def __init__(self, prompt_token_ids: list[int], max_new_tokens: int = 64,
-                 eos_token_id: int | None = None):
+                 eos_token_id: int | None = None,
+                 temperature: float = 0.0, top_p: float = 1.0, top_k: int = 0):
         self.seq_id = Sequence.counter
         Sequence.counter += 1
 
+        prompt_token_ids = list(prompt_token_ids)
+        assert prompt_token_ids, "empty prompt"
+        assert all(isinstance(t, int) for t in prompt_token_ids), (
+            "prompt_token_ids must be a flat list of ints, got "
+            f"{type(prompt_token_ids[0]).__name__} — a tokenizer returning a "
+            "BatchEncoding or nested list is the usual cause"
+        )
         self.prompt_len = len(prompt_token_ids)
         self.token_ids = list(prompt_token_ids)
         self.max_new_tokens = max_new_tokens
         self.eos_token_id = eos_token_id
+        self.temperature = temperature
+        self.top_p = top_p
+        self.top_k = top_k
+        # "stop" (hit EOS) or "length" (hit max_new_tokens), for the API.
+        self.finish_reason: str | None = None
 
         self.status = SequenceStatus.WAITING
         self.block_table: list[int] = []
@@ -50,8 +63,12 @@ class Sequence:
 
     def append(self, token_id: int) -> None:
         self.token_ids.append(token_id)
-        if token_id == self.eos_token_id or self.num_new_tokens >= self.max_new_tokens:
+        if token_id == self.eos_token_id:
             self.status = SequenceStatus.FINISHED
+            self.finish_reason = "stop"
+        elif self.num_new_tokens >= self.max_new_tokens:
+            self.status = SequenceStatus.FINISHED
+            self.finish_reason = "length"
 
     def num_blocks_needed(self, block_size: int) -> int:
         return -(-len(self) // block_size)  # ceil

@@ -31,7 +31,9 @@ Ports change when the instance restarts. Override with `ELICE_PORT=... ./sync.sh
 torch          2.6.0+cu124     # cu124, not cu128 — driver caps at 12.2
 transformers   5.16.1
 flash-attn     2.7.4.post1     # see the ABI trap below
-accelerate, huggingface_hub, ninja, einops
+fastapi        0.141.1         # stage 8 server
+uvicorn        0.52.4
+accelerate, huggingface_hub, ninja, einops, triton (with torch)
 ```
 
 Model: `Qwen/Qwen3-8B` in `~/mini-llm/hf` (16 GB), via `HF_HOME=~/mini-llm/hf`.

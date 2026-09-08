@@ -12,6 +12,7 @@ import torch
 from engine.block_manager import BlockManager
 from engine.scheduler import Scheduler
 from engine.sequence import Sequence
+from layers.sampler import Sampler
 from utils.context import reset_context, set_context
 
 
@@ -25,10 +26,11 @@ class LLMEngine:
         # recorded graph is much cheaper than queueing hundreds of kernels.
         self.graph_runner = graph_runner
         self.device = next(model.parameters()).device
+        self.sampler = Sampler(device=str(self.device))
 
     def add_request(self, prompt_token_ids: list[int], max_new_tokens: int = 40,
-                    eos_token_id: int | None = None) -> Sequence:
-        seq = Sequence(prompt_token_ids, max_new_tokens, eos_token_id)
+                    eos_token_id: int | None = None, **sampling) -> Sequence:
+        seq = Sequence(prompt_token_ids, max_new_tokens, eos_token_id, **sampling)
         self.scheduler.add(seq)
         return seq
 
@@ -131,7 +133,13 @@ class LLMEngine:
 
     def run(self, seqs: list[Sequence], is_prefill: bool) -> list[int]:
         logits = self.forward_logits(seqs, is_prefill)
-        return logits.argmax(-1).tolist()  # greedy; a Sampler goes here later
+        f = lambda xs, dt: torch.tensor(xs, dtype=dt, device=self.device)
+        return self.sampler(
+            logits,
+            f([s.temperature for s in seqs], torch.float32),
+            f([s.top_p for s in seqs], torch.float32),
+            f([s.top_k for s in seqs], torch.int64),
+        ).tolist()
 
     def step(self) -> list[Sequence]:
         """Advance every scheduled sequence by one token."""

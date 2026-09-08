@@ -304,3 +304,49 @@ mask = (torch.arange(m)[:, None] + (n - m)) >= torch.arange(n)[None, :]
 ```
 
 Our kernel carries the same `shift = N - M` so it follows flash-attn.
+
+## The serving API: keep the engine off the event loop
+
+`server/api.py`. The engine step is blocking GPU work (15-30 ms), so it runs on
+its own thread and no FastAPI handler ever touches the model. A request drops a
+`Sequence` into the scheduler and waits on its own `asyncio.Queue`; the engine
+thread pushes tokens in as they are produced, via
+`loop.call_soon_threadsafe`. That queue is the entire coupling.
+
+vLLM and SGLang split these across *processes* with ZeroMQ between them, so
+tokenisation and detokenisation overlap the GPU loop on other cores. A thread is
+the same idea one notch simpler, and enough while detokenisation is cheap.
+
+Measured end to end over HTTP:
+
+```
+1 request     0.54s
+8 concurrent  0.89s   ->  4.8x throughput vs running them one at a time
+```
+
+That 4.8x is continuous batching visible from outside the process: eight
+connections arriving together get merged into one engine step.
+
+### Two bugs worth remembering
+
+**Never leave a subprocess's stdout in an unread pipe.** The engine thread
+crashed, no tokens were ever pushed, and every request simply timed out with no
+explanation — the traceback was sitting in a pipe nobody read. Two fixes: the
+test now logs the server to a file and prints its tail on failure, and
+`_run()` wraps the loop so a crash sets `self.fatal`, fails `/health`, and
+closes every open stream instead of hanging them.
+
+**`apply_chat_template(tokenize=True)` does not return token ids** in
+transformers 5.x — it returns a `BatchEncoding`. Concatenating that into a list
+of ids appends its string KEYS, which surfaces much later as
+`ValueError: too many dimensions 'str'` inside `torch.tensor`. Use
+`tokenize=False` and tokenize the string. `Sequence.__init__` now asserts the
+prompt is a flat list of ints so this fails at the boundary with a useful
+message.
+
+### Incremental detokenisation
+
+Decoding one token at a time is wrong: a multi-byte character spans several
+tokens and emits replacement characters. `Stream.delta` decodes the whole
+generated run each time and returns only the new tail. The test asserts the
+concatenated stream deltas equal the non-streamed text exactly.
