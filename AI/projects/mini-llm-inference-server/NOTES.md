@@ -154,3 +154,48 @@ Measured on three prompts sharing a 512-token prefix:
 Note that only **full** blocks are cacheable — a partial trailing block can
 still grow, so its hash is not final. With `block_size=256`, prompts sharing
 fewer than 256 tokens get no benefit at all.
+
+## Tensor parallelism: SPMD removes the need for a driver/worker split
+
+vLLM and nano-vllm run one driver rank that owns the scheduler and pushes
+commands to worker ranks over shared memory or a message queue. We do not need
+that. Every rank runs the *same* engine loop over the same requests; all-reduce
+makes the sharded matmuls sum to the unsharded answer, so every rank derives
+identical logits, samples identical tokens, and their schedulers stay in
+lockstep by construction. No command channel at all.
+
+That works because our sampling is deterministic. Adding temperature sampling
+means seeding identically per step, or sampling on rank 0 and broadcasting.
+
+Sharding scheme, standard Megatron:
+
+| Layer | Split | Communication |
+|---|---|---|
+| q_proj, k_proj, v_proj | column (output dim) | none |
+| o_proj | row (input dim) | all-reduce |
+| gate_proj, up_proj | column | none |
+| down_proj | row | all-reduce |
+| embed_tokens, lm_head, norms | replicated | none |
+
+Column then row is why there are only **two** all-reduces per layer instead of
+four: q/k/v hand their sliced output straight into attention and on into
+o_proj's sliced input, so the intermediate is never gathered.
+
+The shard dimension is read off the layer class in `utils/loader.py`
+(ColumnParallelLinear -> dim 0, RowParallelLinear -> dim 1) rather than from a
+name table, so adding a layer cannot desync the loader.
+
+Measured, Qwen3-8B, TP=2:
+
+```
+TP=1:  32 heads,  8 kv_heads, 144 KB/token, 8.19B params
+TP=2:  16 heads,  4 kv_heads,  72 KB/token, 4.72B params per rank
+prefill and decode logits vs TP=1: 0.19-0.28 max diff, identical tokens
+```
+
+4.72B x 2 exceeds 8.19B because embed_tokens and lm_head are replicated
+(151936 x 4096 each). Vocab-parallelising them would save ~1.2B per rank at the
+cost of an all-gather on the logits; not worth it at this scale.
+
+A row-parallel **bias** must live on one rank only, or it gets added once per
+rank. Qwen3 has none here, but the rule is in `RowParallelLinear`.

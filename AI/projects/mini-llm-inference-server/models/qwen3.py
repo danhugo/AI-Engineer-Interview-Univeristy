@@ -17,6 +17,8 @@ from torch import nn
 from transformers import Qwen3Config
 
 from layers.attention import attend
+from layers.linear import linear
+from utils import parallel
 from utils.context import get_context
 
 
@@ -98,17 +100,26 @@ class Qwen3Attention(nn.Module):
 
     def __init__(self, config: Qwen3Config) -> None:
         super().__init__()
-        self.num_heads = config.num_attention_heads
-        self.num_kv_heads = config.num_key_value_heads
+        # Tensor parallelism splits whole heads across ranks, so each rank
+        # attends over its own heads and its own slice of the KV cache.
+        tp = parallel.world_size()
         self.head_dim = head_dim_of(config)
+        total_heads = config.num_attention_heads
+        total_kv_heads = config.num_key_value_heads
+        assert total_heads % tp == 0 and total_kv_heads % tp == 0, \
+            f"heads {total_heads}/{total_kv_heads} not divisible by TP size {tp}"
+        self.num_heads = total_heads // tp
+        self.num_kv_heads = total_kv_heads // tp
         self.q_size = self.num_heads * self.head_dim
         self.kv_size = self.num_kv_heads * self.head_dim
 
         bias = config.attention_bias  # Qwen3 = False
-        self.q_proj = nn.Linear(config.hidden_size, self.q_size, bias=bias)
-        self.k_proj = nn.Linear(config.hidden_size, self.kv_size, bias=bias)
-        self.v_proj = nn.Linear(config.hidden_size, self.kv_size, bias=bias)
-        self.o_proj = nn.Linear(self.q_size, config.hidden_size, bias=False)
+        h = config.hidden_size
+        self.q_proj = linear(h, total_heads * self.head_dim, bias, "column")
+        self.k_proj = linear(h, total_kv_heads * self.head_dim, bias, "column")
+        self.v_proj = linear(h, total_kv_heads * self.head_dim, bias, "column")
+        # Row parallel: consumes the sliced attention output, all-reduces once.
+        self.o_proj = linear(total_heads * self.head_dim, h, False, "row")
 
         # QK-Norm: Qwen3 RMS-norms each head's q and k vectors. Always present.
         self.q_norm = RMSNorm(self.head_dim, eps=config.rms_norm_eps)
@@ -140,9 +151,11 @@ class Qwen3MLP(nn.Module):
 
     def __init__(self, config: Qwen3Config) -> None:
         super().__init__()
-        self.gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+        h, i = config.hidden_size, config.intermediate_size
+        self.gate_proj = linear(h, i, False, "column")
+        self.up_proj = linear(h, i, False, "column")
+        # Row parallel: the second all-reduce of the block.
+        self.down_proj = linear(i, h, False, "row")
 
     def forward(self, x):
         return self.down_proj(F.silu(self.gate_proj(x)) * self.up_proj(x))
