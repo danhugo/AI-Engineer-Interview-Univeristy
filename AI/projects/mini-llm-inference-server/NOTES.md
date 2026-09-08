@@ -244,3 +244,63 @@ Capture order matters: record the largest bucket first and pass its
 `graph.pool()` to the rest, or each capture allocates its own memory pool.
 Warm up outside the capture as well — cuBLAS and flash-attn allocate workspaces
 on first call, and that allocation must not be recorded.
+
+## The flash-attention study kernel
+
+`layers/flash_attn_study.py`, Triton, ~120 lines. The engine never imports it;
+`test_stage7.py` proves it matches.
+
+The algorithm in one block. Plain attention materialises S = QK^T, which is
+seq x seq — 64M numbers per head at 8k context, far too big for SRAM, so every
+element goes to HBM and comes back twice. Flash attention never materialises
+it: walk K/V in tiles that fit in SRAM and keep a running softmax.
+
+```
+m_new = max(m_old, max(tile))
+alpha = exp(m_old - m_new)        # correction for everything accumulated so far
+l     = l * alpha + sum(exp(tile - m_new))
+acc   = acc * alpha + exp(tile - m_new) @ V_tile
+```
+
+`acc / l` at the end is exactly softmax attention. Traffic drops from
+O(seq^2) to O(seq x head_dim). It is a memory-access rewrite, not an
+approximation. The FlashAttention-2 detail is rescaling the accumulator and
+dividing by `l` once at the end rather than renormalising each tile.
+
+### Accuracy, measured against fp32 SDPA
+
+```
+case                                shape       ours      flash
+qwen3 prefill      b2 q512 k512 h32/8 d128    0.00787    0.00846
+qwen3 long        b1 q2048 k2048 h32/8 d128   0.00788    0.00786
+decode-ish q=1      b4 q1 k777 h32/8 d128     0.00054    0.00065
+non-causal         b2 q256 k256 h16/16 d64    0.00201    0.00200
+MHA (no GQA)        b2 q320 k320 h8/8 d64     0.00703    0.00888
+ragged seq len     b1 q300 k300 h4/2 d128     0.00658    0.00904
+head_dim 32         b2 q128 k128 h8/2 d32     0.00735    0.00923
+```
+
+Ours is *more* accurate in 5 of 7 cases — and that is exactly why it is
+**9.5x slower** (7.30 ms vs 0.77 ms). Loading q/k/v as fp32 means `tl.dot`
+runs in fp32 instead of on the bf16 tensor cores. Real flash-attn keeps the
+matmuls in bf16 with fp32 accumulators, and also does software pipelining,
+warp specialisation, and autotuned tile shapes. None of that is here; the
+point was the algorithm.
+
+### The reference must not be `is_causal=True`
+
+The first version of this test compared against
+`scaled_dot_product_attention(is_causal=True)` and reported an error of
+**3.57 for both kernels**. Two independent kernels cannot be wrong
+identically — that is what gave the reference away.
+
+Cause: when `seq_q != seq_k`, SDPA aligns the causal mask **top-left**, so a
+single decode query sees only token 0. flash-attn aligns **bottom-right**, so
+that query sees the whole history. The convention matters for exactly the
+shape decode uses. Build the mask explicitly:
+
+```python
+mask = (torch.arange(m)[:, None] + (n - m)) >= torch.arange(n)[None, :]
+```
+
+Our kernel carries the same `shift = N - M` so it follows flash-attn.
