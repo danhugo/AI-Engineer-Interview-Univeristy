@@ -78,17 +78,76 @@ The one study module here is the flash-attention Triton kernel.
 
 ## Build stages
 
-Each stage is runnable on its own.
+All nine done. Each has a test that gates it.
 
-1. **Skeleton** — Qwen3 forward with `flash-attn`, 1 GPU, one prompt generates.
-2. **Paged KV cache** — `BlockManager` + Triton KV-store kernel; attention reads block tables.
-3. **Scheduler + engine loop** — continuous batching over many prompts (offline).
-4. **Prefix caching** — hash blocks, dedup, ref-count.
-5. **Tensor parallelism (TP=2)** — shard weights, NCCL, process spawn.
-6. **CUDA graphs** — capture/replay decode for fixed batch buckets.
-7. **Flash-attention study kernel** — Triton, tested to match `flash-attn`.
-8. **Serving API** — OpenAI-compatible endpoint + streaming.
-9. **Benchmark** — prefill / decode tokens-per-second.
+| | Stage | Test | Gate |
+|---|---|---|---|
+| 1 | Qwen3 forward with `flash-attn` | `run.py`, `diag_fp32.py` | fp32 bit-identical to HF |
+| 2 | Paged KV cache | `test_stage2.py` | cached output == uncached, token for token |
+| 3 | Scheduler + continuous batching | `test_stage3.py` | batched logits == unbatched |
+| 4 | Prefix caching | `test_stage4.py` | 512 tokens reused, answer unchanged |
+| 5 | Tensor parallelism TP=2 | `test_stage5.py` | TP=2 logits == TP=1 |
+| 6 | CUDA graphs | `test_stage6.py` | **bit-exact**, 2x faster |
+| 7 | Flash-attn kernel (study) | `test_stage7.py` | matches `flash-attn` accuracy |
+| 8 | OpenAI-compatible server | `test_stage8.py` | streaming + 4.8x on 8 concurrent |
+| 9 | Benchmark | `bench/throughput.py` | see Results |
+
+Run any of them with `./sync.sh py test_stage4.py`.
+
+## Results
+
+Qwen3-8B, bf16, one A100 80GB. `./sync.sh run 'python -m bench.throughput'`.
+
+### Decode — the whole point of CUDA graphs
+
+| batch | eager ms | graph ms | speedup | eager tok/s | graph tok/s |
+|---|---|---|---|---|---|
+| 1 | 33.08 | 15.29 | 2.16x | 30 | 65 |
+| 4 | 33.26 | 15.71 | 2.12x | 120 | 255 |
+| 16 | 33.14 | 16.65 | 1.99x | 483 | 961 |
+| 32 | 33.19 | 17.31 | 1.92x | 964 | 1849 |
+
+Read the `eager ms` column: **33.1 ms whether the batch is 1 or 32**. Thirty-two
+times the arithmetic in the same wall clock means the GPU is idle waiting on the
+CPU to launch kernels. That is why graphs help, and why they help most when
+there is least work to hide the launches behind.
+
+### End to end vs HuggingFace `generate()`
+
+| batch | HF s | ours s | speedup | HF tok/s | ours tok/s |
+|---|---|---|---|---|---|
+| 1 | 3.46 | 1.01 | **3.41x** | 19 | 63 |
+| 8 | 2.77 | 1.06 | **2.60x** | 185 | 481 |
+
+64 new tokens, greedy, same prompt.
+
+### Prefill
+
+| prompt tokens | ms | tokens/s |
+|---|---|---|
+| 128 | 38.5 | 3,322 |
+| 512 | 51.4 | 9,962 |
+| 2048 | 187.7 | 10,912 |
+
+Throughput saturates near 10k tok/s. The 128-token case looks bad only because
+fixed per-step overhead has nothing to amortise against — prefill is
+compute-bound, which is exactly why it is not worth graphing.
+
+### Prefix caching
+
+3 prompts sharing a 512-token prefix: cold 0.646s → warm 0.540s (**1.20x**),
+hit rate 50%. Modest here because 16 decode steps dominate the total; the win
+grows with longer shared prefixes and shorter generations. On prefill alone,
+99% of prompt tokens skipped attention compute.
+
+### Tensor parallelism
+
+| | heads/rank | kv_heads/rank | KV per token | params/rank |
+|---|---|---|---|---|
+| TP=1 | 32 | 8 | 144 KB | 8.19B |
+| TP=2 | 16 | 4 | **72 KB** | 4.72B |
+
+Halving KV bytes per rank is the real win: cache capacity scales with GPUs.
 
 ## Correctness anchor
 
