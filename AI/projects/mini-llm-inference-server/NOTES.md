@@ -199,3 +199,48 @@ cost of an all-gather on the logits; not worth it at this scale.
 
 A row-parallel **bias** must live on one rank only, or it gets added once per
 rank. Qwen3 has none here, but the rule is in `RowParallelLinear`.
+
+## CUDA graphs: the flat eager timing is the proof
+
+Measured on one A100, Qwen3-8B, decode only:
+
+```
+ batch   eager ms   graph ms   speedup   max|diff|
+     1      33.29      15.24     2.18x    0.000000
+     4      33.63      15.64     2.15x    0.000000
+    16      33.50      16.66     2.01x    0.000000
+```
+
+The important column is `eager ms`: **33.3 ms whether the batch is 1 or 16**.
+Sixteen times the arithmetic for the same wall clock means the GPU is not the
+bottleneck at all — the step is spent waiting on the CPU to queue ~hundreds of
+tiny kernels (36 layers x matmuls, norms, RoPE, attention), each a few
+microseconds of launch cost and microseconds of work.
+
+A graph records that launch sequence once and replays it with one call, so the
+CPU leaves the hot path. 2x here, and throughput then scales with batch
+(30 -> 478 tok/s eager, 66 -> 960 tok/s graphed).
+
+Prefill is deliberately not graphed: it processes whole prompts, the kernels are
+large, the GPU is already saturated, and launch cost is noise.
+
+**This is the one stage whose test demands bit-exactness.** Everywhere else
+bf16 noise forces a tolerance, but a replay runs the same kernels in the same
+order at the same addresses, so anything other than 0.000000 is a bug.
+
+Three things a graph needs, and what each cost us:
+
+- **Static addresses.** Inputs are written into pre-allocated buffers; a freshly
+  allocated tensor each step would invalidate the recorded pointers.
+- **Static shapes.** One graph per batch size in `BUCKETS`, real batches padded
+  up to the next bucket. Block-table width is part of the shape too, so it is
+  fixed at capture time.
+- **A sink block.** Padded rows still execute their K/V write. Sending them to
+  slot `-1` would land on the last real slot and silently corrupt a sequence,
+  so the cache allocates one extra block past the usable pool and padding
+  reads and writes there. Nothing ever reads it.
+
+Capture order matters: record the largest bucket first and pass its
+`graph.pool()` to the rest, or each capture allocates its own memory pool.
+Warm up outside the capture as well — cuBLAS and flash-attn allocate workspaces
+on first call, and that allocation must not be recorded.

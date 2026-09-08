@@ -68,7 +68,15 @@ class BlockManager:
 
         # One (k, v) pair per layer. Shape is what flash-attn's paged kernels
         # want: (num_blocks, block_size, num_kv_heads, head_dim).
-        shape = (num_blocks, block_size, num_kv_heads, head_dim)
+        #
+        # One extra block past the usable pool is the sink. CUDA graphs need a
+        # fixed batch size, so a decode step with fewer sequences is padded —
+        # and those padded rows still execute a K/V write. Aiming them at the
+        # sink keeps them from corrupting a real sequence's blocks. Nothing
+        # ever reads it.
+        self.sink_block_id = num_blocks
+        self.sink_slot = num_blocks * block_size
+        shape = (num_blocks + 1, block_size, num_kv_heads, head_dim)
         self.k_caches = [torch.zeros(shape, dtype=dtype, device=device) for _ in range(num_layers)]
         self.v_caches = [torch.zeros(shape, dtype=dtype, device=device) for _ in range(num_layers)]
 

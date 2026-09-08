@@ -16,10 +16,14 @@ from utils.context import reset_context, set_context
 
 
 class LLMEngine:
-    def __init__(self, model, manager: BlockManager, scheduler: Scheduler):
+    def __init__(self, model, manager: BlockManager, scheduler: Scheduler,
+                 graph_runner=None):
         self.model = model
         self.manager = manager
         self.scheduler = scheduler
+        # Optional DecodeGraphRunner. Decode is launch-bound, so replaying a
+        # recorded graph is much cheaper than queueing hundreds of kernels.
+        self.graph_runner = graph_runner
         self.device = next(model.parameters()).device
 
     def add_request(self, prompt_token_ids: list[int], max_new_tokens: int = 40,
@@ -108,11 +112,16 @@ class LLMEngine:
         prep = self._prepare_prefill if is_prefill else self._prepare_decode
         input_ids, positions, ctx, logits_indices = prep(seqs)
 
-        set_context(**ctx)
-        try:
-            logits = self.model(input_ids, positions, logits_indices)
-        finally:
-            reset_context()
+        runner = self.graph_runner
+        if (not is_prefill and runner is not None
+                and runner.can_run(len(seqs), ctx["block_table"].shape[1])):
+            logits = runner.run(input_ids, positions, ctx)
+        else:
+            set_context(**ctx)
+            try:
+                logits = self.model(input_ids, positions, logits_indices)
+            finally:
+                reset_context()
 
         # The K/V now exists, so any block that filled up is safe to share.
         for seq in seqs:
