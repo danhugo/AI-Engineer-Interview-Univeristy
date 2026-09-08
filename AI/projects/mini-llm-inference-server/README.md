@@ -140,6 +140,47 @@ hit rate 50%. Modest here because 16 decode steps dominate the total; the win
 grows with longer shared prefixes and shorter generations. On prefill alone,
 99% of prompt tokens skipped attention compute.
 
+### Quality — does it generate the *right* tokens?
+
+Fast is easy; fast and correct is the point. Two separate checks.
+
+**Implementation gate** — ours vs HuggingFace on the same prompts, greedy:
+
+| task | identical text | same final answer | accuracy ours / HF | time ours / HF |
+|---|---|---|---|---|
+| GSM8K (40) | 15/40 | **40/40 (100%)** | 87.5% / 87.5% | 20.1s / 128.4s (6.4x) |
+| MATH-500 (40) | 11/40 | 32/40 (80%) | 80.0% / 70.0% | 35.4s / 287.9s (8.1x) |
+
+Identical *text* is low and that is expected — exact bf16 ties make the two
+trajectories fork (see NOTES.md). Identical *answers* is the meaningful number,
+and on GSM8K it is 40/40 with byte-identical accuracy.
+
+**Quality** — ours with Qwen's recommended non-thinking sampling
+(`temperature=0.7, top_p=0.8, top_k=20`), 200 problems:
+
+| benchmark | ours | published | note |
+|---|---|---|---|
+| GSM8K | **95.0%** | 89.84% | published figure is 8B-**Base** 4-shot; instruct non-thinking beating it is expected |
+| MATH-500 | **81.5%** | 87.4% | see below |
+
+MATH-500 converges as the output budget grows, which identifies the limit as
+truncation rather than a bug:
+
+| max_new | accuracy | answers reaching `\boxed{}` |
+|---|---|---|
+| 1024 | 70.0% | 76% |
+| 2048 | 77.5% | 90% |
+| 4096 | 81.5% | 96% |
+
+The remaining ~6 points: 4% of answers still truncate, the string-based math
+comparison here is a **floor** (`\frac{3}{56}` needs real symbolic
+equivalence, not `==`), sampling adds ±2-3 points, and this is a 200-problem
+subset of 500.
+
+Worth noting: fixing the *scorer* moved GSM8K from 88.5% to 95.0%. The model
+writes `\$70,000` and `60\%` where the gold answers are bare digits. Six and a
+half points of "model quality" were an artefact of the harness.
+
 ### Tensor parallelism
 
 | | heads/rank | kv_heads/rank | KV per token | params/rank |

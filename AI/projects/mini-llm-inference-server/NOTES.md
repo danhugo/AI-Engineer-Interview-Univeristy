@@ -350,3 +350,72 @@ Decoding one token at a time is wrong: a multi-byte character spans several
 tokens and emits replacement characters. `Stream.delta` decodes the whole
 generated run each time and returns only the new tail. The test asserts the
 concatenated stream deltas equal the non-streamed text exactly.
+
+## Benchmarking quality: two gates, never one
+
+`bench/intelligence.py`. Speed benchmarks cannot catch a subtly wrong kernel —
+a server that is fast and wrong looks great on tok/s. But "our score is high"
+is also the wrong test, because that measures the *model*, not our code.
+
+So: two gates.
+
+**Implementation gate** — ours vs HuggingFace, same prompts, greedy, compare
+answers. Greedy for determinism. On GSM8K: **40/40 identical final answers**,
+87.5% accuracy on both sides. That is the number that says paged KV, batching,
+prefix caching and graphs are right.
+
+Note identical *text* was only 15/40. Same lesson as stage 3 — exact bf16 ties
+fork the trajectory. Compare answers, not transcripts.
+
+**Quality gate** — ours with Qwen's sampling, against the published figure.
+
+### What Qwen's docs insist on
+
+- **Thinking is ON by default** and emits `<think>...</think>`. Pass
+  `enable_thinking=False`. Thinking mode wants up to 38k output tokens, so the
+  published non-thinking numbers are the only ones a short run can reach
+  (MATH-500: 87.4 non-thinking vs 97.4 thinking).
+- **Do not greedy decode.** Qwen warns it causes repetition loops and score
+  collapse. Non-thinking wants `temperature=0.7, top_p=0.8, top_k=20`. Our
+  MATH-500 greedy HF run scored 70.0% against 80.0% sampled — consistent with
+  that warning. Greedy is still right for the *agreement* gate, where
+  determinism matters more than the score.
+- Published GSM8K/MMLU numbers are for Qwen3-8B-**Base**, not instruct. The
+  instruct chat tables dropped them as saturated.
+
+### The scorer is part of the measurement
+
+GSM8K went from 88.5% to **95.0%** with no change to the model or the server —
+only to the answer comparison. The model writes money and percentages the way
+a human does:
+
+```
+gold '70000'  got '\$70,000'
+gold '460'    got '\$460'
+gold '60'     got '60\%'
+```
+
+Six and a half points of apparent model quality were a harness artefact. Always
+print the misses before believing a score. All three of the first three misses
+were formatting.
+
+### Truncation looks exactly like stupidity
+
+MATH-500 first scored 70.0% against a published 87.4. The tell was not the
+score but the companion metric: **only 76% of answers contained `\boxed{}`**.
+The rest were cut off mid-derivation, and the fallback "last number in the
+text" then grabbed something arbitrary.
+
+| max_new | accuracy | reached `\boxed{}` |
+|---|---|---|
+| 1024 | 70.0% | 76% |
+| 2048 | 77.5% | 90% |
+| 4096 | 81.5% | 96% |
+
+Accuracy tracks the completion rate, which identifies the cause as the output
+budget, not the implementation. Always report the fraction of answers that
+actually finished alongside the score.
+
+The last few points are the string comparison itself: `\frac{3}{56}` scored
+wrong needs symbolic equivalence, not `==`. `normalise_math` folds the harmless
+LaTeX variants but the scores here remain a floor. A real harness uses sympy.
