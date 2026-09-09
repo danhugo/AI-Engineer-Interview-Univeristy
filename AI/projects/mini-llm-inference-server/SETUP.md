@@ -87,19 +87,52 @@ HF_HOME=~/mini-llm/hf ~/mini-llm/.venv/bin/hf download Qwen/Qwen3-8B
 ## Daily use
 
 ```bash
-./sync.sh push              # local -> box (mirrors: --delete removes box-only files)
-./sync.sh py run.py         # push, then run run.py on the box
-./sync.sh run pytest -q     # push, then run tests
-./sync.sh gpu               # nvidia-smi
-./sync.sh shell             # interactive ssh
-./sync.sh diff              # preview what pull would change
-./sync.sh pull              # box -> local (never deletes; --update keeps newer local files)
+./sync.sh push                 # local -> box (mirrors: --delete removes box-only files)
+./sync.sh py test_stage1.py    # push, then run a script on the box
+./sync.sh run '<cmd>'          # push, then run any command in the box venv
+./sync.sh gpu                  # nvidia-smi
+./sync.sh shell                # interactive ssh
+./sync.sh diff                 # preview what pull would change
+./sync.sh pull                 # box -> local (never deletes; --update keeps newer local files)
 ```
 
 **Direction matters.** `push` mirrors, so anything edited only on the box is
 destroyed. `pull` is guarded with `--update` so an older copy on the box cannot
 clobber a file you just edited locally — a mistake that already cost one edit
 before the guard existed. Run `diff` first when unsure.
+
+## Running the tests
+
+Standalone scripts, not pytest. Stage 1 first — everything after it assumes the
+model is correct, and would pass while comparing ours against ours.
+
+```bash
+./sync.sh py test_stage1.py      # architecture: fp32 exact + bf16 baseline
+./sync.sh py test_stage2.py      # paged KV cache
+./sync.sh py test_stage3.py      # continuous batching
+./sync.sh py test_stage4.py      # prefix caching
+./sync.sh run 'bash run_stage5.sh'   # tensor parallelism (needs TP=1 then TP=2)
+./sync.sh py test_stage6.py      # CUDA graphs
+./sync.sh py test_stage7.py      # flash-attn study kernel
+./sync.sh run 'python test_stage8.py'    # HTTP server (starts a subprocess)
+```
+
+Benchmarks and diagnostics:
+
+```bash
+./sync.sh run 'python -m bench.throughput'                       # speed
+./sync.sh run 'python -m bench.intelligence --task gsm8k --n 200' # quality
+./sync.sh pull                                                    # fetch bench/results/
+
+./sync.sh py diag_layers.py     # where does divergence start, per layer
+./sync.sh py diag_batch.py      # real bug, or a near-tie?
+```
+
+Serving:
+
+```bash
+./sync.sh run 'python -m server.api --port 8000'
+```
 
 ## Verified working
 

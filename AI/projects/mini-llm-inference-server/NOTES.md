@@ -2,7 +2,7 @@
 
 ## Our Qwen3 is correct — proven in fp32
 
-`diag_fp32.py` runs our model and HuggingFace's side by side in fp32
+`test_stage1.py` runs our model and HuggingFace's side by side in fp32
 (one per GPU, SDPA on both sides):
 
 ```
@@ -16,7 +16,7 @@ Bit-identical. Any bf16 gap is precision, not a bug.
 
 ## In bf16, two positions blow up — and that is expected
 
-`run.py` at seq_len 2048:
+`test_stage1.py`, four lengths:
 
 | seq_len | max abs logit diff | relative | worst-position TV | top-1 | top-5 |
 |---|---|---|---|---|---|
@@ -30,14 +30,18 @@ The absolute numbers look alarming and are mostly meaningless. What happened:
 1. `diag_layers.py` — the per-layer gap grows smoothly through layer 15
    (0.06 → 3.75), then **jumps 2238x at layer 16** and stays ~8400 after.
    Embedding diff is exactly 0, so weight loading is fine.
-2. `diag_layer16.py` — attention is fine (diff 4.4); the **MLP** is where it
-   jumps. Only **2 of 2048 positions** are affected (603 and 571, both `,`
-   tokens). Median over all positions: 0.25.
-3. `diag_mlp.py` — feed both MLPs the *same* input and they are
-   **bit-identical**, in bf16 and fp32. Weights identical too. So the MLP is a
-   faithful amplifier, not the bug. (My cancellation guess was wrong —
-   `down_proj` amplification at that element is 1.0x.)
-4. `diag_fp32.py` — fp32 end to end: zero difference.
+2. A drill-down into layer 16's sublayers: attention is fine (diff 4.4); the
+   **MLP** is where it jumps. Only **2 of 2048 positions** are affected (603
+   and 571, both `,` tokens). Median over all positions: 0.25.
+3. Feeding both MLPs the *same* input: they are **bit-identical**, in bf16 and
+   fp32, and the weights match. So the MLP is a faithful amplifier, not the
+   bug. (My cancellation guess was wrong — `down_proj` amplification at that
+   element is 1.0x.)
+4. fp32 end to end: zero difference.
+
+Steps 2 and 3 were one-off scripts (`diag_layer16.py`, `diag_mlp.py`), deleted
+once they had answered. Their conclusions are the two paragraphs above; the
+reusable half of the investigation is `diag_layers.py`.
 
 **Root cause.** Layer 16 is where Qwen3-8B grows *massive activations* —
 single hidden dims reaching ~10⁴, parked on delimiter tokens like `,`. They act
