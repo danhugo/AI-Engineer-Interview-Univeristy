@@ -24,57 +24,96 @@ The one study module here is the flash-attention Triton kernel.
 ## Architecture
 
 ```
-                 HTTP request (OpenAI format)
-                          │
-                 ┌────────▼────────┐
-                 │   Serving API   │  FastAPI, /v1/chat/completions, SSE streaming
-                 └────────┬────────┘
-                          │  add_request
-                 ┌────────▼────────┐
-                 │    LLMEngine    │  the step() loop: schedule → run → postprocess
-                 └────┬───────┬────┘
-          schedule    │       │   run(seqs, is_prefill)
-              ┌───────▼──┐  ┌─▼──────────────┐
-              │Scheduler │  │  ModelRunner   │  tensor prep, CUDA graphs, TP driver
-              │(batching)│  └─┬────────────┬─┘
-              └────┬─────┘    │            │
-                   │          │        ┌───▼────┐
-            ┌──────▼──────┐   │        │ Sampler│  temperature / greedy / top-k,p
-            │ BlockManager│◄──┘        └────────┘
-            │ paged KV +  │   │
-            │ prefix cache│   ▼
-            └─────────────┘  Model (Qwen3, TP=2 sharded)
-                   ▲          │
-                   │      ┌───▼──────────────────────┐
-              Sequence    │ Attention layer          │
-              (per-req    │ flash_attn_varlen (prefill)
-               state)     │ flash_attn_w_kvcache (dec)│
-                          │ + Triton KV-store kernel  │
-                          └───────────────────────────┘
+                  HTTP request (OpenAI format)
+                             │
+                  ┌──────────▼──────────┐
+                  │  server/api.py      │  FastAPI, SSE streaming.
+                  │  AsyncEngine        │  Engine runs on its own thread;
+                  └──────────┬──────────┘  handlers never touch the model.
+                             │  add_request → asyncio.Queue per request
+                  ┌──────────▼──────────┐
+                  │ engine/llm_engine   │  step() = schedule → run → postprocess
+                  │ LLMEngine           │  also builds the flat input tensors
+                  └────┬───────────┬────┘
+            schedule()  │           │  forward_logits(seqs, is_prefill)
+              ┌─────────▼──┐   ┌────▼──────────────┐
+              │ scheduler  │   │ models/qwen3.py   │  36 x DecoderLayer
+              │ Scheduler  │   │ Qwen3ForCausalLM  │
+              └─────┬──────┘   └────┬─────────┬────┘
+   allocate/preempt │               │         │
+              ┌─────▼────────┐      │    ┌────▼──────────┐
+              │ block_manager│◄─────┘    │ layers/linear │  Column/Row
+              │ BlockManager │  slot_     │               │  parallel (TP)
+              │ paged KV +   │  mapping   └────┬──────────┘
+              │ prefix cache │                 │ all_reduce
+              └─────┬────────┘            ┌────▼──────────┐
+                    │                     │utils/parallel │  NCCL, SPMD
+              ┌─────▼────────┐            └───────────────┘
+              │ sequence.py  │
+              │ Sequence     │       ┌────────────────────────────┐
+              └──────────────┘       │ layers/attention.py        │
+                                     │ varlen (prefill) /         │
+              ┌──────────────┐       │ with_kvcache (decode),     │
+              │utils/context │──────►│ both via block_table       │
+              │ per-step     │       └────────────────────────────┘
+              │ slot_mapping │
+              │ cu_seqlens   │       ┌────────────────────────────┐
+              │ block_table  │       │ engine/cuda_graph.py       │
+              └──────────────┘       │ DecodeGraphRunner          │
+                                     │ bucketed replay, sink block│
+              ┌──────────────┐       └────────────────────────────┘
+              │layers/sampler│
+              │ temp/top-p/k │
+              └──────────────┘
 
-  Study-only (not imported by the engine):
-     Flash-attn study kernel  ── Triton, tested to match flash-attn
+  Study only — the engine never imports this:
+      layers/flash_attn_study.py   Triton flash attention, tiled online softmax
+
   Tooling:
-     Benchmark  ── prefill / decode tokens-per-second
+      bench/throughput.py    prefill / decode tok/s, graphs on-off, vs HF
+      bench/intelligence.py  GSM8K / MATH-500, ours vs HF and vs published
+      diag_layers.py         where does divergence start, per layer
+      diag_batch.py          is a divergence a real bug or a near-tie
 ```
 
-### Blocks
+### Files
 
-| Block | Responsibility |
+| File | Responsibility |
 |---|---|
-| **Serving API** | OpenAI-compatible HTTP endpoint + SSE streaming; drives the engine loop |
-| **LLMEngine** | Request queue + `step()` = schedule → run → postprocess |
-| **Scheduler** | Continuous batching: waiting/running queues, prefill-priority, preemption, chunked prefill |
-| **Sequence** | Per-request state: tokens, block table, status |
-| **BlockManager** | Paged KV cache: block pool, `slot_mapping`, prefix caching (hash + ref-count) |
-| **ModelRunner** | Flatten sequences → tensors, run forward, capture/replay CUDA graphs, drive TP |
-| **Model (Qwen3)** | The transformer, weights sharded across 2 GPUs |
-| **Attention layer** | `flash-attn` for prefill/decode + a Triton kernel that writes K/V into cache blocks |
-| **Sampler** | Temperature + greedy (top-k / top-p as stretch) |
-| **Tensor Parallelism** | `torch.multiprocessing` spawn + NCCL all-reduce; TP=2 |
-| **CUDA graphs** | Record decode step once, replay it — removes launch overhead |
-| **Flash-attn study kernel** | Hand-written Triton flash attention; study-only, tested vs `flash-attn` |
-| **Benchmark** | Prefill / decode throughput vs raw HuggingFace |
+| `server/api.py` | OpenAI-compatible endpoints, SSE streaming, incremental detokenisation. `AsyncEngine` puts the engine on a background thread |
+| `engine/llm_engine.py` | `step()` = schedule → run → postprocess. Flattens sequences into tensors, runs the forward, samples |
+| `engine/scheduler.py` | Continuous batching: waiting/running deques, prefill-priority, recompute preemption |
+| `engine/sequence.py` | One request: tokens, block table, sampling params, finish reason |
+| `engine/block_manager.py` | Paged KV cache: block pool, `slot_mapping`, prefix caching (chained hash + ref-count), sink block |
+| `engine/cuda_graph.py` | `DecodeGraphRunner`: one graph per bucketed batch size, static buffers |
+| `engine/generate.py` | Offline convenience wrappers over the engine |
+| `models/qwen3.py` | The transformer: GQA + QK-Norm + RoPE + SwiGLU. Module names match HuggingFace |
+| `layers/attention.py` | `flash_attn_varlen_func` (prefill) and `flash_attn_with_kvcache` (decode), both reading the block table; plus the K/V scatter |
+| `layers/linear.py` | `ColumnParallelLinear` / `RowParallelLinear` for tensor parallelism |
+| `layers/sampler.py` | Temperature, top-p, top-k, greedy at temp 0; seeded per step so TP ranks agree |
+| `layers/flash_attn_study.py` | **Study only.** Triton flash attention. The engine never imports it |
+| `utils/context.py` | Per-step `slot_mapping` / `cu_seqlens` / `block_table`, so the model signature stays free of serving concerns |
+| `utils/parallel.py` | torchrun init, `all_reduce`, rank-0 logging |
+| `utils/loader.py` | Loads HF weights, slicing them per rank by reading the shard dim off the layer class |
+| `common.py` | Shared fixtures: model path, test prompts, loading |
+
+### Deliberately not built
+
+Named here because the first draft of this README promised them:
+
+- **No `ModelRunner` class.** Tensor prep lives in `LLMEngine`, CUDA graphs in
+  `DecodeGraphRunner`, TP in `layers/linear.py` + `utils/parallel.py`. Splitting
+  them that way meant no extra indirection layer was needed.
+- **No Triton kernel for the K/V scatter.** `store_kv` flattens the first two
+  cache dims and does one indexed assignment. Plain torch, and not the
+  bottleneck. Triton appears only in the study kernel.
+- **No chunked prefill.** A step is all-prefill or all-decode. vLLM mixes them
+  so a long prompt cannot stall decodes; that is a refinement we skipped.
+- **No driver/worker split for TP.** Every rank runs the same engine loop
+  (SPMD), so identical logits keep the schedulers in lockstep with no command
+  channel. vLLM and nano-vllm both need one; we do not.
+- **No vocab-parallel embedding.** `embed_tokens` and `lm_head` are replicated,
+  costing ~1.2B params per rank in exchange for skipping an all-gather.
 
 ## Build stages
 
@@ -196,9 +235,50 @@ half points of "model quality" were an artefact of the harness.
 
 Halving KV bytes per rank is the real win: cache capacity scales with GPUs.
 
-## Correctness anchor
+## How this is tested
 
-`test_correctness.py` runs greedy decode and asserts the output matches
-`transformers` for the same prompt — this catches paging and TP bugs.
-`test_flash_attn_study.py` asserts the study kernel matches `flash-attn`
-within tolerance.
+Paged KV, batching, prefix caching, TP and CUDA graphs are all supposed to be
+*bit-neutral* rearrangements: faster, same answer. So every stage is gated on
+"did the answer change", never on "is it fast".
+
+**fp32 is only possible at stage 1.** From stage 2 on, every path goes through
+flash-attn's paged kernels, which accept fp16/bf16 only. So stage 1 is the one
+place exact equality can be demanded — the difference between *proving*
+correctness and merely *failing to detect* a problem:
+
+```
+fp32, seq 1024:  max|diff| 0.000000   TV 0.000000   top-1 100%   layer-16 0.000000
+```
+
+**bf16 needs several metrics, because none of them is trustworthy alone:**
+
+| Metric | Role | Why not alone |
+|---|---|---|
+| top-k mutual agreement | **the gate** | — (this is vLLM's own check) |
+| worst-position TV distance | health number | blind to *where* |
+| max abs logit diff | report only | dominated by tail tokens at ~1e-16 probability |
+| exact top-1 match | report only | flips on exact ties, with nothing wrong |
+| final answers vs HF | **the real gate** | what a user actually sees |
+
+Stage 1's bf16 run is the calibration: it is the only run where fp32 has
+already proven the code correct, so the spread there *is* the normal amount
+(TV 0.026-0.060). Later stages compare against it.
+
+CUDA graphs are the exception — bf16 but still gated **bit-exact**, since a
+replay runs identical kernels in identical order at identical addresses.
+
+### Two traps that cost real time
+
+**The scorer is part of the measurement.** GSM8K read 88.5% until the answer
+comparison learned that `\$70,000` and `70000` are the same number. Then 95.0%.
+Six and a half points of apparent model quality were a harness artefact.
+
+**Truncation looks exactly like stupidity.** MATH-500 read 70.0% against a
+published 87.4. The tell was not the score but that only 76% of answers
+contained `\boxed{}` — the rest were cut off mid-derivation. Raising the output
+budget: 1024 → 70.0%, 2048 → 77.5%, 4096 → 81.5%, with the completion rate
+tracking it at 76% → 90% → 96%.
+
+`NOTES.md` has the full numerical write-up, including why HuggingFace is **not**
+ground truth in bf16 (at one element fp32 says 10274.6, HF's bf16 says 8448,
+ours says 52.75 — both wrong).
