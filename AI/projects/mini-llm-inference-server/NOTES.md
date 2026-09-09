@@ -419,3 +419,29 @@ actually finished alongside the score.
 The last few points are the string comparison itself: `\frac{3}{56}` scored
 wrong needs symbolic equivalence, not `==`. `normalise_math` folds the harmless
 LaTeX variants but the scores here remain a floor. A real harness uses sympy.
+
+## Cast before transfer, not after
+
+`model.to(bfloat16).cuda()` beats `model.cuda().to(bfloat16)`. Measured on
+1.34 GB of fp32 (same size as a 20-layer 4096x4096 stack):
+
+```
+cuda() then to(bf16)     140.0 ms   sends 1.34 GB over PCIe
+to(bf16) then cuda()     127.9 ms   sends 0.67 GB over PCIe
+                         -> 1.09x
++ pinned memory          128.5 ms   no further gain
+```
+
+Only **9%**, not 2x, even though half the bytes cross the bus — the CPU-side
+fp32→bf16 cast costs roughly what the saved transfer time gains.
+
+The real reason to prefer it is **peak GPU memory**: casting first means the
+fp32 copy never lands on the device. For Qwen3-8B that is 16 GB instead of 32 GB
+at load time, which is the difference between fitting and not on a smaller card.
+
+A first attempt at measuring this (`bench/cast_order.py`, since deleted) timed
+`make_model().cuda().to(bf16)` against `make_model().to(bf16).cuda()` and
+reported 2528 vs 2519 ms — a 0.4% difference, i.e. nothing. The bug was that
+`make_model()` sat *inside* the timed region, so ~2.5s of CPU parameter
+initialisation swamped the ~130 ms actually under test. Keep setup out of the
+loop, or the benchmark measures setup.
