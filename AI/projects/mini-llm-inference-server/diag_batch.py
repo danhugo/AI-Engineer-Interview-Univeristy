@@ -21,7 +21,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from engine.block_manager import build_manager_for
 from engine.generate import generate_many
 from models.qwen3 import Qwen3ForCausalLM
-from run import path
+from common import path
 from test_stage3 import MAX_NEW, PROMPTS
 
 

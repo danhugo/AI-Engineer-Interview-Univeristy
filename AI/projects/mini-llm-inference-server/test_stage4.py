@@ -20,7 +20,7 @@ from engine.block_manager import build_manager_for
 from engine.llm_engine import LLMEngine
 from engine.scheduler import Scheduler
 from models.qwen3 import Qwen3ForCausalLM
-from run import FILLER, path
+from common import FILLER, path
 
 TOL = 0.75      # bf16 noise; see NOTES.md
 BLOCK = 256

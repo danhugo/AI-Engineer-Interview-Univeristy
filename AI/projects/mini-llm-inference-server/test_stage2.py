@@ -16,7 +16,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from engine.block_manager import build_manager_for
 from engine.generate import generate
 from models.qwen3 import Qwen3ForCausalLM
-from run import build_long_ids, path
+from common import build_long_ids, path
 
 MAX_NEW = 40
 # flash-attn's paged kernel requires the block size to be a multiple of 256,

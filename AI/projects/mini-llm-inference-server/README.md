@@ -82,7 +82,7 @@ All nine done. Each has a test that gates it.
 
 | | Stage | Test | Gate |
 |---|---|---|---|
-| 1 | Qwen3 forward with `flash-attn` | `run.py`, `diag_fp32.py` | fp32 bit-identical to HF |
+| 1 | Qwen3 forward with `flash-attn` | `test_stage1.py` | fp32 **exactly** equal to HF, all metrics |
 | 2 | Paged KV cache | `test_stage2.py` | cached output == uncached, token for token |
 | 3 | Scheduler + continuous batching | `test_stage3.py` | batched logits == unbatched |
 | 4 | Prefix caching | `test_stage4.py` | 512 tokens reused, answer unchanged |
@@ -92,7 +92,13 @@ All nine done. Each has a test that gates it.
 | 8 | OpenAI-compatible server | `test_stage8.py` | streaming + 4.8x on 8 concurrent |
 | 9 | Benchmark | `bench/throughput.py` | see Results |
 
-Run any of them with `./sync.sh py test_stage4.py`.
+Run any of them with `./sync.sh py test_stage4.py`. Stage 1 first — everything
+after it assumes the model is right, and would happily pass while comparing
+ours against ours.
+
+`diag_layers.py` and `diag_batch.py` are diagnostics, not gates: reach for them
+when a test fails and you need to know *where* the divergence starts or whether
+it is just a near-tie.
 
 ## Results
 

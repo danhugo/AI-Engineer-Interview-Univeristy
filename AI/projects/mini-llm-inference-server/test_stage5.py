@@ -25,7 +25,7 @@ from engine.scheduler import Scheduler
 from models.qwen3 import Qwen3ForCausalLM
 from utils import parallel
 from utils.loader import load_weights
-from run import path
+from common import path
 
 REF_FILE = "/tmp/stage5_tp1_logits.pt"
 TOL = 0.75  # bf16 noise; see NOTES.md

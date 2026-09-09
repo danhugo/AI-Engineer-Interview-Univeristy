@@ -445,3 +445,48 @@ reported 2528 vs 2519 ms — a 0.4% difference, i.e. nothing. The bug was that
 `make_model()` sat *inside* the timed region, so ~2.5s of CPU parameter
 initialisation swamped the ~130 ms actually under test. Keep setup out of the
 loop, or the benchmark measures setup.
+
+## Why stage 1 runs both precisions, and why every metric in both
+
+`test_stage1.py`.
+
+**fp32 is only possible at stage 1.** From stage 2 on, every path goes through
+flash-attn's paged kernels, which take fp16/bf16 only. So this is the single
+place where exact equality can be demanded — the difference between *proving*
+correctness and merely *failing to detect* a problem.
+
+```
+fp32, seq 1024:  max|diff| 0.000000   TV 0.000000   top-1 100%   layer-16 0.000000
+```
+
+**bf16 at stage 1 is not redundant — it is the calibration.** Stages 2-9 can
+only be tested in bf16, and their tolerances have to come from somewhere. Stage
+1 is the one run where fp32 has already proven the code correct, so whatever
+bf16 spread appears here *is* the normal amount. The recorded baseline:
+
+| seq_len | max abs diff | relative | worst-position TV | top-1 | top-5 |
+|---|---|---|---|---|---|
+| 6 | 0.28 | 1.1% | 0.026 | 100% | 100% |
+| 128 | 0.66 | 1.5% | 0.039 | 100% | 100% |
+| 512 | 6.92 | 12.8% | 0.057 | 99.0% | 100% |
+| 2048 | 21.33 | 36.9% | 0.060 | 99.9% | 100% |
+
+Later stages compare against this. Same spread means nothing new; more spread
+means a new problem.
+
+**Why the full metric set even in fp32, where `torch.equal` would logically
+suffice.** Two reasons, both practical rather than logical:
+
+1. **A boolean tells you nothing on failure.** A 1e-7 kernel difference and a
+   structural bug both return `False`. The full readout is what separates
+   rounding from breakage without re-instrumenting.
+2. **fp32 is not guaranteed bit-exact.** TF32 matmuls, a cuBLAS version bump,
+   or a different GPU can each change the last bits with no bug present. Then
+   TV and top-k are the only way to say "changed but harmless".
+
+The cost is one extra reduction over a forward pass already done.
+
+Note also that `max|diff| == 0` is a single *check* but not a single *point* —
+it covers all 155M entries of a (1024, 151936) comparison. `max` is only a weak
+metric when the threshold is "less than X"; when the threshold is exactly zero
+it is the strongest one available.

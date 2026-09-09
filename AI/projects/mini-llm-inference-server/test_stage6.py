@@ -22,7 +22,7 @@ from engine.cuda_graph import DecodeGraphRunner
 from engine.llm_engine import LLMEngine
 from engine.scheduler import Scheduler
 from models.qwen3 import Qwen3ForCausalLM
-from run import path
+from common import path
 
 PROMPT = "The specialty of Hanoi is"
 BATCHES = (1, 4, 16)

@@ -14,7 +14,7 @@ Useful again in later stages: a paged-KV or TP bug shows up here the same way.
 
 import torch
 
-from run import build_long_ids, load_models, path
+from common import build_long_ids, load_models, path
 
 SEQ_LEN = 2048
 

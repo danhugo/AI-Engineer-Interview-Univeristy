@@ -25,7 +25,7 @@ from engine.generate import generate_many
 from engine.llm_engine import LLMEngine
 from engine.scheduler import Scheduler
 from models.qwen3 import Qwen3ForCausalLM
-from run import path
+from common import path
 
 MAX_NEW = 24
 # bf16 noise for this model; see NOTES.md. Logits run to ~55.
